@@ -964,13 +964,13 @@
     // ※ 아래 값은 실제 SOLAPI 값으로 입력하면 됩니다.
     // ================================================================
     const DIRECT_SOLAPI_CONFIG = {
-        active: false,
-        apiKey: 'NCSDNT800ZYQ9CSG',       // 예: NCSXXXXXXXXXXXXXX
-        apiSecret: 'T9C8UPUQR87UWAUH2C4JG4GF8K7EOJUO',    // SOLAPI API Secret
-        sender: '01062158036',       // 등록된 발신번호 (숫자만)
-        pfid: 'KA01PF260914165156466fMFWqipUAxY',         // 카카오톡 채널 PFID
-        tplStart: 'KA01TP260914170657152uAAq3ysJgNP',     // 대여 알림톡 템플릿 ID
-        tplReturn: 'KA01TP260914170302103InvZ7mwfLru'     // 반납 알림톡 템플릿 ID
+        active: true,
+        apiKey: 'NCSDNT800ZYQ9CSG',
+        apiSecret: 'T9C8UPUQR87UWAUH2C4JG4GF8K7EOJUO',
+        sender: '01062158036',
+        pfid: 'KA01PF260914165156466fMFWqipUAxY',
+        tplStart: 'KA01TP260914170657152uAAq3ysJgNP',
+        tplReturn: 'KA01TP260914170302103InvZ7mwfLru'
     };
 
     let kakaoConfig = { ...DIRECT_SOLAPI_CONFIG };
@@ -1044,20 +1044,9 @@
         isMarqueeActive = s.isMarqueeActive || false;
         adminMemoText = s.adminMemoText || "";
         slideConfig = s.slideConfig || { active: true, interval: 5, images: [] };
-        const dbKakao = s.kakaoConfig || {};
-        const localKakao = (() => {
-            try { return JSON.parse(localStorage.getItem('DIRECT_SOLAPI_CONFIG') || 'null') || {}; }
-            catch (_) { return {}; }
-        })();
-        kakaoConfig = {
-            active: localKakao.active ?? dbKakao.active ?? DIRECT_SOLAPI_CONFIG.active,
-            apiKey: localKakao.apiKey || dbKakao.apiKey || DIRECT_SOLAPI_CONFIG.apiKey,
-            apiSecret: localKakao.apiSecret || dbKakao.apiSecret || DIRECT_SOLAPI_CONFIG.apiSecret,
-            sender: localKakao.sender || dbKakao.sender || DIRECT_SOLAPI_CONFIG.sender,
-            pfid: localKakao.pfid || dbKakao.pfid || DIRECT_SOLAPI_CONFIG.pfid,
-            tplStart: localKakao.tplStart || dbKakao.tplStart || DIRECT_SOLAPI_CONFIG.tplStart,
-            tplReturn: localKakao.tplReturn || dbKakao.tplReturn || DIRECT_SOLAPI_CONFIG.tplReturn
-        };
+        // 알림톡 자격증명은 Firebase/LocalStorage가 덮어쓰지 않도록
+        // 이 HTML의 DIRECT_SOLAPI_CONFIG를 단일 진실 공급원으로 사용합니다.
+        kakaoConfig = { ...DIRECT_SOLAPI_CONFIG };
         
         adminPassword = s.adminPassword || "0000";
         middlePassword = s.middlePassword || "0000";
@@ -1162,10 +1151,12 @@
     });
 
     function saveSettingsToDB() {
+        // SOLAPI API Key/Secret은 Firebase에 저장하지 않습니다.
+        // 알림톡 설정은 HTML의 DIRECT_SOLAPI_CONFIG에서만 관리합니다.
         db.ref('settings').set({
             GRID_COLS, GRID_ROWS, AISLE_COLS,
             noticeTitle, marqueeText, isMarqueeActive,
-            adminMemoText, slideConfig, kakaoConfig,
+            adminMemoText, slideConfig,
             adminPassword, middlePassword
         });
     }
@@ -1886,69 +1877,79 @@
         closeSlideModal(); showToast(`🖼️ 슬라이드 설정 저장 완료`);
     }
 
-    // 브라우저 내장 Web Crypto API로 HMAC-SHA256 생성
-    // → CryptoJS/Node.js/ENV/API 서버가 필요하지 않습니다.
+    // =====================================================================
+    // SOLAPI 직접 연동
+    // SOLAPI 공식 인증 방식:
+    // signature = HMAC-SHA256(API Secret, Date + Salt)
+    // Authorization = HMAC-SHA256 apiKey=..., date=..., salt=..., signature=...
+    // =====================================================================
+    function bytesToHex(bytes) {
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function createSolapiSalt(byteLength = 16) {
+        const bytes = new Uint8Array(byteLength);
+        crypto.getRandomValues(bytes);
+        return bytesToHex(bytes);
+    }
+
     async function createSolapiSignature(apiSecret, date, salt) {
         const encoder = new TextEncoder();
-        const key = await crypto.subtle.importKey(
+        const keyData = encoder.encode(apiSecret);
+        const messageData = encoder.encode(date + salt);
+        const cryptoKey = await crypto.subtle.importKey(
             'raw',
-            encoder.encode(apiSecret),
+            keyData,
             { name: 'HMAC', hash: 'SHA-256' },
             false,
             ['sign']
         );
-        const signatureBuffer = await crypto.subtle.sign(
-            'HMAC',
-            key,
-            encoder.encode(date + salt)
-        );
-        return Array.from(new Uint8Array(signatureBuffer))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
+        const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        return bytesToHex(new Uint8Array(signatureBuffer));
     }
 
     async function getSolapiHeader(apiKey, apiSecret) {
         const date = new Date().toISOString();
-        const salt = crypto.randomUUID
-            ? crypto.randomUUID().replace(/-/g, '')
-            : `${Date.now()}${Math.random().toString(36).slice(2)}`;
+        const salt = createSolapiSalt(16); // 32 hex chars / 16 bytes
         const signature = await createSolapiSignature(apiSecret, date, salt);
         return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
     }
 
     async function sendKakaoAlimtalk(type, toPhone, seatNum) {
-        if (!kakaoConfig.active) return;
+        const config = { ...DIRECT_SOLAPI_CONFIG };
+        if (!config.active) return;
 
-        const apiKey = (kakaoConfig.apiKey || '').trim();
-        const apiSecret = (kakaoConfig.apiSecret || '').trim();
-        const sender = (kakaoConfig.sender || '').replace(/[^0-9]/g, '');
-        const pfid = (kakaoConfig.pfid || '').trim();
-        const templateId = String((type === 'RENT') ? (kakaoConfig.tplStart || '') : (kakaoConfig.tplReturn || '')).trim();
-        const to = (toPhone || '').replace(/[^0-9]/g, '');
+        const apiKey = String(config.apiKey || '').trim();
+        const apiSecret = String(config.apiSecret || '').trim();
+        const sender = String(config.sender || '').replace(/[^0-9]/g, '');
+        const pfid = String(config.pfid || '').trim();
+        const templateId = String(type === 'RENT' ? (config.tplStart || '') : (config.tplReturn || '')).trim();
+        const to = String(toPhone || '').replace(/[^0-9]/g, '');
 
-        if (!apiKey || !apiSecret || !sender || !pfid || !templateId || !to) {
-            showToast('⚠️ 알림톡 설정이 완성되지 않았습니다.');
+        if (!apiKey || !apiSecret || !pfid || !templateId || !to) {
+            showToast('⚠️ HTML의 DIRECT_SOLAPI_CONFIG 설정을 확인해주세요.');
             return;
         }
 
-        const text = (type === 'RENT')
+        const text = type === 'RENT'
             ? `풍향대동제, 틈: OTIUM\n좌석 번호: ${seatNum}번\n\n대여되었습니다.\n이용해주셔서 감사합니다 🌿`
             : `풍향대동제, 틈: OTIUM\n좌석 번호: ${seatNum}번\n\n반납되었습니다.\n이용해주셔서 감사합니다 🌿`;
 
         const message = {
             to,
-            from: sender,
+            // 알림톡 자체는 from이 필수가 아니지만, 대체발송을 고려해 입력된 경우만 사용합니다.
+            ...(sender ? { from: sender } : {}),
             text,
             kakaoOptions: {
                 pfId: pfid,
                 templateId,
-                variables: { "#{좌석번호}": String(seatNum) }
+                variables: { '#{좌석번호}': String(seatNum) }
             }
         };
 
         try {
             const authHeader = await getSolapiHeader(apiKey, apiSecret);
-            const res = await fetch('https://api.solapi.com/messages/v4/send-many', {
+            const res = await fetch('https://api.solapi.com/messages/v4/send-many/detail', {
                 method: 'POST',
                 mode: 'cors',
                 headers: {
@@ -1966,40 +1967,35 @@
                 showToast(`💬 ${seatNum}번 알림톡 발송 완료`);
             } else {
                 console.error('SOLAPI 발송 실패:', res.status, result || responseText);
-                showToast(`⚠️ 알림톡 발송 실패 (${result.errorMessage || result.errorCode || res.status})`);
+                const detail = result.errorMessage || result.errorCode || result.message || `HTTP ${res.status}`;
+                showToast(`⚠️ 알림톡 발송 실패: ${detail}`);
             }
         } catch (e) {
             console.error('SOLAPI 브라우저 직접 호출 오류:', e);
-            showToast('⚠️ 알림톡 연결 실패. 브라우저 CORS/API 설정을 확인하세요.');
+            showToast('⚠️ 알림톡 연결 실패. 브라우저 CORS 정책을 확인해주세요.');
         }
     }
 
     function openKakaoModal() {
-        document.getElementById('kakaoActiveCheck').checked = kakaoConfig.active;
-        document.getElementById('solapiApiKey').value = kakaoConfig.apiKey || '';
-        document.getElementById('solapiApiSecret').value = kakaoConfig.apiSecret || '';
-        document.getElementById('solapiSender').value = kakaoConfig.sender || '';
-        document.getElementById('solapiPfid').value = kakaoConfig.pfid || '';
-        document.getElementById('solapiTplStart').value = kakaoConfig.tplStart || '';
-        document.getElementById('solapiTplReturn').value = kakaoConfig.tplReturn || '';
+        // 알림톡 인증정보는 Firebase 설정이 아니라 이 HTML의 DIRECT_SOLAPI_CONFIG를 사용합니다.
+        const config = { ...DIRECT_SOLAPI_CONFIG };
+        document.getElementById('kakaoActiveCheck').checked = !!config.active;
+        document.getElementById('solapiApiKey').value = config.apiKey || '';
+        document.getElementById('solapiApiSecret').value = config.apiSecret || '';
+        document.getElementById('solapiSender').value = config.sender || '';
+        document.getElementById('solapiPfid').value = config.pfid || '';
+        document.getElementById('solapiTplStart').value = config.tplStart || '';
+        document.getElementById('solapiTplReturn').value = config.tplReturn || '';
         document.getElementById('kakaoModal').classList.add('active');
     }
     function closeKakaoModal() { document.getElementById('kakaoModal').classList.remove('active'); }
     function saveKakaoSettings() {
-        kakaoConfig = {
-            active: document.getElementById('kakaoActiveCheck').checked,
-            apiKey: document.getElementById('solapiApiKey').value.trim(),
-            apiSecret: document.getElementById('solapiApiSecret').value.trim(),
-            sender: document.getElementById('solapiSender').value.trim(),
-            pfid: document.getElementById('solapiPfid').value.trim(),
-            tplStart: document.getElementById('solapiTplStart').value.trim(),
-            tplReturn: document.getElementById('solapiTplReturn').value.trim(),
-        };
-        try {
-            localStorage.setItem('DIRECT_SOLAPI_CONFIG', JSON.stringify(kakaoConfig));
-        } catch (_) {}
-        saveSettingsToDB();
-        closeKakaoModal(); showToast("💬 알림톡 설정 저장 완료");
+        // 실제 API 자격증명은 HTML 상단 DIRECT_SOLAPI_CONFIG에서만 수정합니다.
+        // 관리자 모달에서 저장한 값이 Firebase나 LocalStorage로 덮어쓰지 않도록 합니다.
+        closeKakaoModal();
+        showToast(DIRECT_SOLAPI_CONFIG.active
+            ? '💬 HTML 직접 알림톡 설정을 사용합니다.'
+            : '💬 알림톡이 비활성화되어 있습니다. HTML의 DIRECT_SOLAPI_CONFIG.active를 true로 설정하세요.');
     }
 
     function resetAllData() {
@@ -2017,7 +2013,7 @@
     }
     
     function exportData() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ GRID_COLS, GRID_ROWS, AISLE_COLS, rentalData, rentalLogs, noticeTitle, marqueeText, kakaoConfig, isDarkMode, slideConfig, adminMemoText, adminPassword, middlePassword }));
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ GRID_COLS, GRID_ROWS, AISLE_COLS, rentalData, rentalLogs, noticeTitle, marqueeText, isDarkMode, slideConfig, adminMemoText, adminPassword, middlePassword }));
         const downloadAnchor = document.createElement('a'); downloadAnchor.setAttribute("href", dataStr);
         downloadAnchor.setAttribute("download", `대여데이터_${new Date().toISOString().slice(0,10)}.json`);
         document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
@@ -2041,7 +2037,6 @@
                     isMarqueeActive: imported.isMarqueeActive || false,
                     adminMemoText: imported.adminMemoText || "",
                     slideConfig: imported.slideConfig || { active: true, interval: 5, images: [] },
-                    kakaoConfig: imported.kakaoConfig || kakaoConfig,
                     adminPassword: imported.adminPassword || "0000",
                     middlePassword: imported.middlePassword || "0000"
                 });
