@@ -893,7 +893,7 @@
 <!-- 알림톡 모달 -->
 <div id="kakaoModal" class="modal-overlay">
     <div class="modal-content" style="width:520px;">
-        <div class="modal-header"><h3>💬 알림톡 설정</h3><button class="btn-close-modal" onclick="closeKakaoModal()">✕</button></div>
+        <div class="modal-header"><h3>💬 알림톡 설정 (HTML 직접 연동)</h3><button class="btn-close-modal" onclick="closeKakaoModal()">✕</button></div>
         
         <label style="display:flex; align-items:center; gap:10px; margin-bottom:20px; padding:14px; background:var(--bg); border-radius:10px; border:2px solid var(--border); font-weight:800; cursor:pointer; transition:var(--transition-smooth);">
             <input type="checkbox" id="kakaoActiveCheck" style="width:18px; height:18px; accent-color:var(--primary);">
@@ -901,7 +901,7 @@
         </label>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-            <div class="form-group"><label>API Key</label><input type="text" id="solapiApiKey" placeholder="API Key 입력"></div>
+            <div class="form-group"><label>API Key</label><input type="text" id="solapiApiKey" placeholder="SOLAPI API Key 입력"></div>
             <div class="form-group"><label>API Secret</label><input type="password" id="solapiApiSecret" placeholder="API Secret 입력"></div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
@@ -958,15 +958,22 @@
     let slideConfig = { active: true, interval: 5, images: [] };
     let tempImages = [];
 
-    let kakaoConfig = {
+    // ================================================================
+    // SOLAPI 알림톡 - HTML 직접 연동 설정
+    // ※ Vercel 환경변수/ENV/API 폴더를 사용하지 않습니다.
+    // ※ 아래 값은 실제 SOLAPI 값으로 입력하면 됩니다.
+    // ================================================================
+    const DIRECT_SOLAPI_CONFIG = {
         active: false,
-        apiKey: '',
-        apiSecret: '',
-        sender: '',
-        pfid: '',
-        tplStart: '',
-        tplReturn: ''
+        apiKey: '',       // 예: NCSXXXXXXXXXXXXXX
+        apiSecret: '',    // SOLAPI API Secret
+        sender: '',       // 등록된 발신번호 (숫자만)
+        pfid: '',         // 카카오톡 채널 PFID
+        tplStart: '',     // 대여 알림톡 템플릿 ID
+        tplReturn: ''     // 반납 알림톡 템플릿 ID
     };
+
+    let kakaoConfig = { ...DIRECT_SOLAPI_CONFIG };
 
     const DARK_MODE_KEY = 'FESTIVAL_DARK_MODE_V10';
     let isDarkMode = localStorage.getItem(DARK_MODE_KEY) === 'true';
@@ -1037,7 +1044,20 @@
         isMarqueeActive = s.isMarqueeActive || false;
         adminMemoText = s.adminMemoText || "";
         slideConfig = s.slideConfig || { active: true, interval: 5, images: [] };
-        kakaoConfig = s.kakaoConfig || { active: false, apiKey: '', apiSecret: '', sender: '', pfid: '', tplStart: '', tplReturn: '' };
+        const dbKakao = s.kakaoConfig || {};
+        const localKakao = (() => {
+            try { return JSON.parse(localStorage.getItem('DIRECT_SOLAPI_CONFIG') || 'null') || {}; }
+            catch (_) { return {}; }
+        })();
+        kakaoConfig = {
+            active: localKakao.active ?? dbKakao.active ?? DIRECT_SOLAPI_CONFIG.active,
+            apiKey: localKakao.apiKey || dbKakao.apiKey || DIRECT_SOLAPI_CONFIG.apiKey,
+            apiSecret: localKakao.apiSecret || dbKakao.apiSecret || DIRECT_SOLAPI_CONFIG.apiSecret,
+            sender: localKakao.sender || dbKakao.sender || DIRECT_SOLAPI_CONFIG.sender,
+            pfid: localKakao.pfid || dbKakao.pfid || DIRECT_SOLAPI_CONFIG.pfid,
+            tplStart: localKakao.tplStart || dbKakao.tplStart || DIRECT_SOLAPI_CONFIG.tplStart,
+            tplReturn: localKakao.tplReturn || dbKakao.tplReturn || DIRECT_SOLAPI_CONFIG.tplReturn
+        };
         
         adminPassword = s.adminPassword || "0000";
         middlePassword = s.middlePassword || "0000";
@@ -1866,43 +1886,92 @@
         closeSlideModal(); showToast(`🖼️ 슬라이드 설정 저장 완료`);
     }
 
-    function getSolapiHeader(apiKey, apiSecret) {
+    // 브라우저 내장 Web Crypto API로 HMAC-SHA256 생성
+    // → CryptoJS/Node.js/ENV/API 서버가 필요하지 않습니다.
+    async function createSolapiSignature(apiSecret, date, salt) {
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(apiSecret),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+        );
+        const signatureBuffer = await crypto.subtle.sign(
+            'HMAC',
+            key,
+            encoder.encode(date + salt)
+        );
+        return Array.from(new Uint8Array(signatureBuffer))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+    }
+
+    async function getSolapiHeader(apiKey, apiSecret) {
         const date = new Date().toISOString();
-        const salt = Math.random().toString(36).substring(2, 11);
-        const signature = CryptoJS.HmacSHA256(date + salt, apiSecret).toString(CryptoJS.enc.Hex);
+        const salt = crypto.randomUUID
+            ? crypto.randomUUID().replace(/-/g, '')
+            : `${Date.now()}${Math.random().toString(36).slice(2)}`;
+        const signature = await createSolapiSignature(apiSecret, date, salt);
         return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
     }
 
     async function sendKakaoAlimtalk(type, toPhone, seatNum) {
-        if (!kakaoConfig.active || !kakaoConfig.apiKey || !kakaoConfig.apiSecret) return;
-        const templateId = (type === 'RENT') ? kakaoConfig.tplStart : kakaoConfig.tplReturn;
-        if (!templateId) return;
+        if (!kakaoConfig.active) return;
 
-        let text = (type === 'RENT') 
+        const apiKey = (kakaoConfig.apiKey || '').trim();
+        const apiSecret = (kakaoConfig.apiSecret || '').trim();
+        const sender = (kakaoConfig.sender || '').replace(/[^0-9]/g, '');
+        const pfid = (kakaoConfig.pfid || '').trim();
+        const templateId = String((type === 'RENT') ? (kakaoConfig.tplStart || '') : (kakaoConfig.tplReturn || '')).trim();
+        const to = (toPhone || '').replace(/[^0-9]/g, '');
+
+        if (!apiKey || !apiSecret || !sender || !pfid || !templateId || !to) {
+            showToast('⚠️ 알림톡 설정이 완성되지 않았습니다.');
+            return;
+        }
+
+        const text = (type === 'RENT')
             ? `풍향대동제, 틈: OTIUM\n좌석 번호: ${seatNum}번\n\n대여되었습니다.\n이용해주셔서 감사합니다 🌿`
             : `풍향대동제, 틈: OTIUM\n좌석 번호: ${seatNum}번\n\n반납되었습니다.\n이용해주셔서 감사합니다 🌿`;
 
-        const payload = {
-            message: {
-                to: toPhone.replace(/[^0-9]/g, ''),
-                from: kakaoConfig.sender.replace(/[^0-9]/g, ''),
-                text: text,
-                kakaoOptions: {
-                    pfId: kakaoConfig.pfid,
-                    templateId: templateId,
-                    variables: { "#{좌석번호}": seatNum.toString() }
-                }
+        const message = {
+            to,
+            from: sender,
+            text,
+            kakaoOptions: {
+                pfId: pfid,
+                templateId,
+                variables: { "#{좌석번호}": String(seatNum) }
             }
         };
 
         try {
-            const res = await fetch("https://api.solapi.com/messages/v4/send-many", {
-                method: "POST", headers: { "Content-Type": "application/json", "Authorization": getSolapiHeader(kakaoConfig.apiKey, kakaoConfig.apiSecret) },
-                body: JSON.stringify({ messages: [payload.message] })
+            const authHeader = await getSolapiHeader(apiKey, apiSecret);
+            const res = await fetch('https://api.solapi.com/messages/v4/send-many', {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authHeader
+                },
+                body: JSON.stringify({ messages: [message] })
             });
-            if (res.ok) showToast(`💬 ${seatNum}번 알림톡 발송 완료`);
-            else showToast("⚠️ 알림톡 발송 실패 (설정을 확인하세요)");
-        } catch (e) { console.error("네트워크 에러:", e); }
+
+            const responseText = await res.text();
+            let result = {};
+            try { result = JSON.parse(responseText); } catch (_) {}
+
+            if (res.ok) {
+                showToast(`💬 ${seatNum}번 알림톡 발송 완료`);
+            } else {
+                console.error('SOLAPI 발송 실패:', res.status, result || responseText);
+                showToast(`⚠️ 알림톡 발송 실패 (${result.errorMessage || result.errorCode || res.status})`);
+            }
+        } catch (e) {
+            console.error('SOLAPI 브라우저 직접 호출 오류:', e);
+            showToast('⚠️ 알림톡 연결 실패. 브라우저 CORS/API 설정을 확인하세요.');
+        }
     }
 
     function openKakaoModal() {
@@ -1926,6 +1995,9 @@
             tplStart: document.getElementById('solapiTplStart').value.trim(),
             tplReturn: document.getElementById('solapiTplReturn').value.trim(),
         };
+        try {
+            localStorage.setItem('DIRECT_SOLAPI_CONFIG', JSON.stringify(kakaoConfig));
+        } catch (_) {}
         saveSettingsToDB();
         closeKakaoModal(); showToast("💬 알림톡 설정 저장 완료");
     }
