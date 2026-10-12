@@ -1,0 +1,2144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎪 풍향대동제, 틈: OTIUM - 테이블 대여 관리 시스템</title>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <!-- Firebase SDK 추가 -->
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --primary: #6366f1; 
+            --primary-hover: #4f46e5;
+            --primary-light: #e0e7ff;
+            --primary-glow: rgba(99, 102, 241, 0.4);
+            --rented-red: #f43f5e; 
+            --expired-red: #be123c;     
+            --maintenance-yellow: #facc15; 
+            --bg: #f8fafc; 
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --seat-empty-bg: #ffffff;
+            --seat-empty-border: #cbd5e1;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --transition-bounce: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            --transition-smooth: all 0.25s ease;
+        }
+
+        /* 다크 모드 */
+        body.dark-mode {
+            --bg: #0f172a;          
+            --card-bg: #1e293b;     
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --seat-empty-bg: #1e293b;    
+            --seat-empty-border: #475569;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+            --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.5);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard Variable', -apple-system, sans-serif; }
+        html, body { width: 100%; height: 100%; overflow-x: hidden; background-color: var(--bg); color: var(--text-main); transition: background-color 0.3s ease, color 0.3s ease; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        .app-container { display: flex; flex-direction: column; height: 100vh; }
+
+        header {
+            background: rgba(2, 6, 23, 0.85); 
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center;
+            height: 65px; flex-shrink: 0; gap: 16px; z-index: 50; border-bottom: 1px solid rgba(255,255,255,0.1);
+            position: sticky; top: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.1); transition: var(--transition-smooth);
+        }
+
+        .header-notice-section { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .notice-input { 
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); 
+            color: #f8fafc; font-size: 1rem; font-weight: 700; padding: 8px 14px; border-radius: 10px; width: 240px; 
+            transition: var(--transition-smooth);
+        }
+        .notice-input:focus { outline: none; background: rgba(255, 255, 255, 0.2); border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 3px rgba(255,255,255,0.1); }
+        .customer-notice-title, .middle-notice-title { font-size: 1.25rem; font-weight: 800; white-space: nowrap; color: #ffffff; letter-spacing: -0.5px; }
+        .middle-notice-title { display: none; }
+
+        .header-marquee-section {
+            flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); 
+            border-radius: 12px; padding: 4px 12px; height: 46px; transition: var(--transition-smooth);
+        }
+        .header-marquee-section:hover { background: rgba(255, 255, 255, 0.08); }
+        .admin-marquee-controls { display: flex; align-items: center; gap: 10px; width: 100%; }
+        .marquee-input { flex: 1; background: transparent; border: none; color: #fde047; font-size: 1rem; font-weight: 700; padding: 6px 10px; outline: none; }
+        
+        .btn-toggle-marquee { 
+            background: rgba(255, 255, 255, 0.15); color: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.2); 
+            padding: 8px 16px; border-radius: 10px; font-size: 0.9rem; font-weight: 800; cursor: pointer; 
+            transition: var(--transition-bounce);
+        }
+        .btn-toggle-marquee:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-2px); }
+        .btn-toggle-marquee.active { background: #eab308; color: #111827; border-color: #fde047; box-shadow: 0 4px 15px rgba(234, 179, 8, 0.4); }
+
+        .customer-marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: none; }
+        .customer-marquee-text { display: inline-block; white-space: nowrap; padding-left: 100%; font-size: 1.3rem; font-weight: 800; animation: marquee 15s linear infinite; }
+        @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
+
+        .nav-tabs { display: flex; gap: 6px; background: rgba(255,255,255,0.1); padding: 4px; border-radius: 12px; flex-shrink: 0; }
+        .tab-btn { 
+            background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 8px 16px; 
+            border-radius: 10px; font-size: 0.9rem; font-weight: 800; cursor: pointer; transition: var(--transition-smooth); 
+        }
+        .tab-btn:hover { color: #ffffff; background: rgba(255,255,255,0.1); }
+        .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 12px var(--primary-glow); }
+
+        .header-actions { display: flex; gap: 10px; align-items: center; }
+        .btn-header { 
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.15); 
+            color: white; padding: 8px 14px; border-radius: 10px; font-size: 0.9rem; font-weight: 800; 
+            cursor: pointer; display: flex; align-items: center; gap: 6px; transition: var(--transition-bounce);
+        }
+        .btn-header:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
+        .btn-header.icon-only { padding: 8px 12px; font-size: 1.1rem; }
+
+        main { flex: 1; height: calc(100vh - 65px); padding: 16px; box-sizing: border-box; background: var(--bg); transition: var(--transition-smooth); }
+        .tab-content { display: none; height: 100%; opacity: 0; transform: translateY(8px); animation: fadeInTab 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .tab-content.active { display: flex; gap: 16px; }
+        @keyframes fadeInTab { to { opacity: 1; transform: translateY(0); } }
+
+        .grid-container { 
+            flex: 3; background: var(--card-bg); border-radius: var(--radius-lg); padding: 18px; 
+            box-shadow: var(--shadow-md); display: flex; flex-direction: column; 
+            border: 1px solid var(--border); overflow: hidden; transition: var(--transition-smooth);
+        }
+        
+        .stage-bar { 
+            background: linear-gradient(135deg, #1e293b, #0f172a); color: #f8fafc; 
+            text-align: center; padding: 10px; font-weight: 900; font-size: 1.05rem; letter-spacing: 6px; 
+            border-radius: var(--radius-md); margin-bottom: 14px; border: 1px solid #334155; flex-shrink: 0; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.1); 
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .grid-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0; }
+        .search-box { position: relative; display: flex; align-items: center; }
+        .search-input { 
+            padding: 10px 14px 10px 38px; border: 2px solid var(--border); border-radius: 10px; 
+            font-size: 0.95rem; font-weight: 600; width: 260px; background: var(--bg); color: var(--text-main); transition: var(--transition-smooth);
+        }
+        .search-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); background: var(--card-bg); }
+        body.dark-mode .search-input:focus { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+        .search-icon { position: absolute; left: 14px; font-size: 1rem; color: var(--text-muted); pointer-events: none; }
+
+        .stat-badges { display: flex; gap: 10px; }
+        .stat-badge { 
+            display: flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 800; 
+            padding: 6px 12px; background: var(--bg); border-radius: 30px; border: 1px solid var(--border);
+        }
+        .stat-badge .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+
+        .seat-grid { flex: 1; display: grid; gap: 8px; min-height: 0; }
+        .seat-card { 
+            background: var(--seat-empty-bg); border: 2px solid var(--seat-empty-border); 
+            border-radius: var(--radius-md); display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            cursor: pointer; position: relative; padding: 4px; user-select: none; min-height: 0; min-width: 0; overflow: hidden; 
+            box-shadow: var(--shadow-sm); transition: var(--transition-bounce);
+        }
+        .seat-card:hover { border-color: var(--primary); transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 12px rgba(0,0,0,0.08); z-index: 2; }
+        .seat-card.selected { border-color: var(--primary) !important; box-shadow: 0 0 0 3px var(--primary-light), 0 6px 12px rgba(0,0,0,0.1) !important; transform: translateY(-2px) scale(1.02); z-index: 3; }
+        body.dark-mode .seat-card.selected { box-shadow: 0 0 0 3px rgba(99,102,241,0.3), 0 6px 12px rgba(0,0,0,0.3) !important; }
+        
+        /* 🚨 검색어 매칭 하이라이트 효과 추가 */
+        .seat-card.dimmed { opacity: 0.15; filter: grayscale(100%); pointer-events: none; }
+        .seat-card.search-match { 
+            border-color: var(--primary) !important; 
+            box-shadow: 0 0 0 4px var(--primary-light), 0 8px 15px rgba(0,0,0,0.1) !important; 
+            transform: translateY(-3px) scale(1.03); 
+            z-index: 3; 
+        }
+        body.dark-mode .seat-card.search-match { box-shadow: 0 0 0 4px rgba(99,102,241,0.3), 0 8px 15px rgba(0,0,0,0.3) !important; }
+
+        .seat-num { font-weight: 900; color: var(--text-main); margin-bottom: 2px; transition: color 0.25s; }
+        
+        .seat-timer { 
+            font-weight: 700; color: var(--text-muted); white-space: nowrap; 
+            overflow: hidden; text-overflow: ellipsis; max-width: 95%; text-align: center; 
+        }
+
+        .aisle-cell { 
+            background: transparent; border-radius: 6px; display: flex; align-items: center; justify-content: center; 
+            font-size: 0.7rem; font-weight: 800; color: var(--text-muted); pointer-events: none; 
+            border: 2px dashed var(--border); letter-spacing: 2px; opacity: 0.6;
+        }
+
+        .seat-card.rented { 
+            background: linear-gradient(135deg, var(--rented-red), #e11d48); 
+            border-color: transparent; color: white; box-shadow: 0 4px 10px rgba(244, 63, 94, 0.3); 
+        }
+        .seat-card.rented .seat-num { color: white; }
+        .seat-card.rented .seat-timer { color: var(--rented-red); background: rgba(255,255,255,0.95); padding: 2px 8px; border-radius: 10px; font-weight: 900; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        .seat-card.expired { 
+            background: linear-gradient(135deg, var(--expired-red), #9f1239); 
+            border-color: transparent; animation: pulse-red 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; 
+        }
+        .seat-card.expired .seat-num { color: white; }
+        .seat-card.expired .seat-timer { color: white; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 10px; font-weight: 900; backdrop-filter: blur(4px); }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(190, 18, 60, 0.7); } 50% { opacity: 0.85; box-shadow: 0 0 0 8px rgba(190, 18, 60, 0); } }
+
+        .seat-card.maintenance { 
+            background: var(--maintenance-yellow);
+            border-color: transparent; box-shadow: 0 4px 10px rgba(250, 204, 21, 0.4);
+        }
+        .seat-card.maintenance .seat-num { color: #713f12; }
+        .seat-card.maintenance .seat-timer { color: #713f12; background: rgba(255,255,255,0.95); padding: 2px 8px; border-radius: 10px; font-weight: 900; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        body.dark-mode .seat-card.maintenance { background: #eab308; box-shadow: 0 4px 10px rgba(234, 179, 8, 0.2); }
+        body.dark-mode .seat-card.maintenance .seat-num { color: #111827; }
+        body.dark-mode .seat-card.maintenance .seat-timer { color: #fef08a; background: rgba(0,0,0,0.6); }
+
+        .control-panel { 
+            flex: 1; min-width: 340px; max-width: 390px; background: var(--card-bg); 
+            border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-md); 
+            border: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; 
+            transition: var(--transition-smooth);
+        }
+        .panel-title { font-size: 1.2rem; font-weight: 900; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid var(--bg); flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+        
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px; }
+        .form-group input, .form-group textarea { 
+            width: 100%; padding: 10px 14px; border: 2px solid var(--border); border-radius: 10px; 
+            font-size: 0.95rem; font-weight: 600; background: var(--bg); color: var(--text-main); transition: var(--transition-smooth); 
+        }
+        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); background: var(--card-bg); box-shadow: 0 0 0 3px var(--primary-light); }
+        body.dark-mode .form-group input:focus, body.dark-mode .form-group textarea:focus { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+
+        .time-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+        .btn-time { 
+            padding: 10px 6px; border: 2px solid var(--border); background: var(--bg); color: var(--text-main); 
+            border-radius: 10px; font-size: 0.9rem; cursor: pointer; font-weight: 800; transition: var(--transition-bounce); 
+        }
+        .btn-time:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .btn-time.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 12px var(--primary-glow); transform: translateY(-2px); }
+
+        .btn-action { 
+            width: 100%; padding: 12px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 900; 
+            cursor: pointer; margin-top: 10px; transition: var(--transition-bounce); display: inline-flex; 
+            justify-content: center; align-items: center; gap: 8px; box-shadow: var(--shadow-sm); 
+        }
+        .btn-action:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); filter: brightness(1.05); }
+        .btn-action:active { transform: translateY(0); filter: brightness(0.95); }
+        
+        .btn-save { background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: white; box-shadow: 0 4px 12px var(--primary-glow); }
+        .btn-cancel { background: transparent; color: var(--rented-red); border: 2px solid var(--rented-red); }
+        .btn-cancel:hover { background: rgba(244, 63, 94, 0.1); }
+        .btn-maint { background: linear-gradient(135deg, var(--maintenance-yellow), #eab308); color: #713f12; box-shadow: 0 4px 12px rgba(250, 204, 21, 0.3); }
+
+        .history-container { width: 100%; background: var(--card-bg); border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--border); display: flex; flex-direction: column; transition: var(--transition-smooth); box-shadow: var(--shadow-md); }
+        .history-table-wrapper { flex: 1; overflow-y: auto; border: 2px solid var(--border); border-radius: 12px; background: var(--card-bg); }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95rem; }
+        th, td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        th { background: var(--bg); color: var(--text-muted); font-weight: 800; position: sticky; top: 0; font-size: 0.9rem; z-index: 1; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        tbody tr.clickable-row { cursor: pointer; transition: background 0.2s; }
+        tbody tr.clickable-row:hover { background: var(--primary-light); }
+        body.dark-mode tbody tr.clickable-row:hover { background: rgba(99, 102, 241, 0.15); }
+
+        /* 중간 관리자 카드 리스트 스타일 */
+        .middle-list-box { display: flex; flex-direction: column; gap: 6px; max-height: 100px; overflow-y: auto; padding-right: 4px; }
+        .middle-item-row {
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--bg); border: 1px solid var(--border); padding: 6px 10px;
+            border-radius: 8px; cursor: pointer; transition: var(--transition-smooth);
+        }
+        .middle-item-row:hover { border-color: var(--primary); background: var(--primary-light); transform: translateY(-1px); }
+        body.dark-mode .middle-item-row:hover { background: rgba(99, 102, 241, 0.15); }
+
+        .modal-overlay { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            display: none; justify-content: center; align-items: center; z-index: 9999; 
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-content { 
+            background: var(--card-bg); color: var(--text-main); width: 480px; max-width: 92%; 
+            border-radius: var(--radius-lg); padding: 24px; border: 1px solid rgba(255,255,255,0.1); 
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); 
+            transform: scale(0.9) translateY(20px); transition: var(--transition-bounce);
+        }
+        .modal-overlay.active .modal-content { transform: scale(1) translateY(0); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h3 { font-size: 1.25rem; font-weight: 900; }
+        .btn-close-modal { 
+            background: var(--bg); border: none; width: 32px; height: 32px; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; font-size: 1.1rem; cursor: pointer; 
+            color: var(--text-muted); transition: var(--transition-smooth); 
+        }
+        .btn-close-modal:hover { background: var(--border); color: var(--rented-red); transform: rotate(90deg); }
+
+        .toast-notification { 
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(120px); 
+            background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); color: white; 
+            padding: 12px 24px; border-radius: 100px; font-size: 0.95rem; font-weight: 800; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3); opacity: 0; 
+            transition: var(--transition-bounce); z-index: 10000; pointer-events: none; 
+            display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+        .undo-toast { 
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(120px); 
+            background: rgba(225, 29, 72, 0.95); backdrop-filter: blur(10px); color: white; 
+            padding: 12px 20px 12px 26px; border-radius: 100px; display: flex; align-items: center; gap: 20px; 
+            box-shadow: 0 10px 25px rgba(225, 29, 72, 0.4); opacity: 0; 
+            transition: var(--transition-bounce); z-index: 10001; pointer-events: none; 
+            font-weight: 800; font-size: 0.95rem; border: 1px solid rgba(255,255,255,0.2);
+        }
+        .undo-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+        .btn-undo { 
+            background: white; color: #e11d48; border: none; padding: 8px 18px; border-radius: 30px; 
+            font-weight: 900; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.9rem; 
+            transition: var(--transition-bounce); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .btn-undo:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.15); }
+
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .settings-card { background: var(--bg); padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+        .settings-card.full-width { grid-column: span 2; }
+        .settings-card.danger { background: rgba(254, 242, 242, 0.5); border-color: #fecaca; }
+        body.dark-mode .settings-card.danger { background: rgba(127, 29, 29, 0.2); border-color: #7f1d1d; }
+        .settings-inner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+
+        .image-preview-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; max-height: 180px; overflow-y: auto; padding-right: 6px; }
+        .image-preview-item { position: relative; width: 85px; height: 85px; border-radius: 10px; overflow: hidden; border: 2px solid var(--border); box-shadow: var(--shadow-sm); transition: var(--transition-smooth); }
+        .image-preview-item:hover { transform: scale(1.05); border-color: var(--primary); }
+        .image-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+        .btn-del-img { 
+            position: absolute; top: 4px; right: 4px; background: rgba(225, 29, 72, 0.9); color: white; 
+            border: none; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 0.75rem; 
+            display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: var(--transition-bounce);
+        }
+        .btn-del-img:hover { transform: scale(1.15); }
+
+        #customerSlideOverlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9000; display: none; justify-content: center; align-items: center; }
+        #customerSlideOverlay img { max-width: 100%; max-height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.8s ease-in-out; }
+        #customerSlideOverlay img.fade-in { opacity: 1; }
+        #customerSlideOverlay img.fade-out { opacity: 0; }
+
+        body.customer-mode { background-color: var(--bg); overflow: hidden !important; height: 100vh !important; }
+        body.customer-mode .app-container { height: 100vh !important; }
+        body.customer-mode header { background: var(--card-bg) !important; border-bottom: 2px solid var(--border); padding: 14px 20px; }
+        body.customer-mode .customer-notice-title { color: var(--text-main) !important; display: block !important; }
+        body.customer-mode .header-notice-section .notice-input, body.customer-mode .control-panel, body.customer-mode .nav-tabs, body.customer-mode .admin-only, body.customer-mode .header-actions, body.customer-mode #middle-mode-container { display: none !important; }
+        body.customer-mode .header-marquee-section { background: rgba(120,120,120,0.05) !important; border: 1px solid var(--border) !important; display: flex !important; }
+        body.customer-mode .customer-marquee-container { display: block !important; }
+        body.customer-mode .customer-marquee-text { color: #ea580c !important; }
+        body.dark-mode.customer-mode .customer-marquee-text { color: #fde047 !important; }
+        body.customer-mode main { height: calc(100vh - 75px) !important; padding: 16px !important; }
+        body.customer-mode #tab-grid { display: flex !important; height: 100% !important; gap: 0 !important; }
+        body.customer-mode .grid-container { flex: 1 !important; width: 100% !important; height: 100% !important; border: none !important; box-shadow: none !important; padding: 20px; }
+        body.customer-mode .seat-card { box-shadow: var(--shadow-sm); pointer-events: none; }
+        body.customer-mode .stat-badge span { color: var(--text-main) !important; font-weight: 900 !important; }
+
+
+        /* ================================================================
+           소비자 전광판 3840×2160(16:9) 최적화
+           - 관리자/중간관리자 화면에는 영향 없음
+           - 실제 4K 전광판과 작은 미리보기 창 모두 동일한 16:9 기준으로 확대
+        ================================================================= */
+        body.customer-mode {
+            --customer-scale: min(1vw, 1vh);
+            width: 100vw !important;
+            height: 100vh !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+        }
+
+        body.customer-mode header {
+            height: clamp(72px, 4.6vh, 100px) !important;
+            padding: clamp(12px, 0.9vw, 36px) clamp(24px, 1.25vw, 48px) !important;
+            gap: clamp(12px, 0.8vw, 30px) !important;
+            flex-shrink: 0 !important;
+        }
+
+        body.customer-mode .header-notice-section {
+            gap: clamp(8px, 0.45vw, 18px) !important;
+        }
+
+        body.customer-mode .customer-notice-title {
+            font-size: clamp(24px, 1.45vw, 56px) !important;
+            letter-spacing: -0.04em !important;
+        }
+
+        body.customer-mode .header-notice-section > span {
+            font-size: clamp(22px, 1.25vw, 48px) !important;
+        }
+
+        body.customer-mode .header-marquee-section {
+            height: clamp(48px, 3.0vh, 72px) !important;
+            padding: 0 clamp(12px, 0.65vw, 26px) !important;
+            border-radius: clamp(10px, 0.45vw, 18px) !important;
+        }
+
+        body.customer-mode .customer-marquee-text {
+            font-size: clamp(22px, 1.35vw, 52px) !important;
+            line-height: 1 !important;
+            animation-duration: 18s !important;
+        }
+
+        body.customer-mode main {
+            height: calc(100vh - clamp(72px, 4.6vh, 100px)) !important;
+            padding: clamp(12px, 0.85vw, 32px) !important;
+        }
+
+        body.customer-mode #tab-grid {
+            height: 100% !important;
+            min-height: 0 !important;
+        }
+
+        body.customer-mode .grid-container {
+            padding: clamp(14px, 1.05vw, 40px) !important;
+            border-radius: clamp(12px, 0.65vw, 26px) !important;
+            min-height: 0 !important;
+        }
+
+        body.customer-mode .stage-bar {
+            padding: clamp(10px, 0.65vw, 26px) !important;
+            margin-bottom: clamp(10px, 0.7vw, 28px) !important;
+            border-radius: clamp(10px, 0.55vw, 22px) !important;
+            font-size: clamp(20px, 1.15vw, 44px) !important;
+            letter-spacing: clamp(2px, 0.32vw, 12px) !important;
+        }
+
+        body.customer-mode .grid-header {
+            margin-bottom: clamp(10px, 0.7vw, 28px) !important;
+            min-height: clamp(36px, 2.6vh, 60px) !important;
+        }
+
+        body.customer-mode .stat-badges {
+            gap: clamp(8px, 0.55vw, 22px) !important;
+        }
+
+        body.customer-mode .stat-badge {
+            gap: clamp(5px, 0.3vw, 12px) !important;
+            padding: clamp(7px, 0.45vw, 18px) clamp(12px, 0.7vw, 28px) !important;
+            font-size: clamp(16px, 0.9vw, 34px) !important;
+            border-radius: 999px !important;
+        }
+
+        body.customer-mode .stat-badge .dot {
+            width: clamp(8px, 0.45vw, 18px) !important;
+            height: clamp(8px, 0.45vw, 18px) !important;
+        }
+
+        body.customer-mode .seat-grid {
+            gap: clamp(5px, 0.38vw, 15px) !important;
+            min-height: 0 !important;
+        }
+
+        body.customer-mode .seat-card {
+            border-width: clamp(1px, 0.08vw, 3px) !important;
+            border-radius: clamp(8px, 0.55vw, 22px) !important;
+            padding: clamp(4px, 0.3vw, 12px) !important;
+        }
+
+        body.customer-mode .seat-num {
+            font-size: clamp(18px, 1.05vw, 42px) !important;
+            margin-bottom: clamp(2px, 0.18vw, 7px) !important;
+            line-height: 1.05 !important;
+        }
+
+        body.customer-mode .seat-timer {
+            font-size: clamp(12px, 0.72vw, 29px) !important;
+            line-height: 1.05 !important;
+        }
+
+        body.customer-mode .seat-card.rented .seat-timer,
+        body.customer-mode .seat-card.expired .seat-timer,
+        body.customer-mode .seat-card.maintenance .seat-timer {
+            padding: clamp(2px, 0.18vw, 7px) clamp(5px, 0.35vw, 14px) !important;
+            border-radius: 999px !important;
+        }
+
+        body.customer-mode .aisle-cell {
+            font-size: clamp(10px, 0.5vw, 20px) !important;
+            letter-spacing: clamp(1px, 0.15vw, 6px) !important;
+        }
+
+        /* 16:9 비율이 아닌 창에서 실행해도 콘텐츠가 잘리지 않도록 중앙 정렬 */
+        body.customer-mode .app-container {
+            width: 100vw !important;
+            height: 100vh !important;
+            overflow: hidden !important;
+        }
+
+        @media (min-aspect-ratio: 16/9) {
+            body.customer-mode main {
+                padding-left: max(clamp(12px, 0.85vw, 32px), calc((100vw - 177.7778vh) / 2 + 12px)) !important;
+                padding-right: max(clamp(12px, 0.85vw, 32px), calc((100vw - 177.7778vh) / 2 + 12px)) !important;
+            }
+        }
+
+        /* 중간 관리자 모드 전용 원스크린 최적화 레이아웃 */
+        body.middle-mode { background-color: var(--bg); overflow: hidden !important; height: 100vh !important; }
+        body.middle-mode .app-container { height: 100vh !important; display: flex; flex-direction: column; width: 100%; }
+        body.middle-mode header { background: var(--card-bg) !important; border-bottom: 1px solid var(--border); height: 55px; padding: 8px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        body.middle-mode .admin-only, body.middle-mode .nav-tabs, body.middle-mode .header-marquee-section { display: none !important; }
+        body.middle-mode main { height: calc(100vh - 55px) !important; padding: 8px !important; width: 100%; overflow: hidden !important; }
+        body.middle-mode .middle-mode-layout { display: flex; flex-direction: column; gap: 6px; width: 100%; height: 100%; }
+        
+        body.middle-mode .btn-filter-group { margin-bottom: 2px !important; gap: 6px !important; }
+        body.middle-mode .btn-filter { padding: 6px 14px !important; font-size: 0.8rem !important; }
+
+        body.middle-mode .grid-container { height: auto !important; max-height: 38vh !important; padding: 8px !important; flex: none !important; width: 100% !important; overflow-y: auto !important; }
+        body.middle-mode .stage-bar { padding: 6px !important; font-size: 0.85rem !important; margin-bottom: 6px !important; letter-spacing: 2px !important; }
+        body.middle-mode .seat-grid { min-width: 0 !important; width: 100% !important; gap: 4px !important; }
+        body.middle-mode .seat-card { padding: 4px !important; border-radius: 6px !important; min-height: 44px; }
+        body.middle-mode .seat-num { font-size: 0.8rem !important; margin-bottom: 2px !important; }
+        body.middle-mode .seat-timer { font-size: 0.55rem !important; padding: 2px 4px !important; }
+
+        body.middle-mode .control-panel { padding: 10px !important; max-width: 100% !important; width: 100% !important; flex: 1 !important; min-height: 0 !important; overflow-y: auto !important; }
+        body.middle-mode .panel-title { margin-bottom: 6px !important; padding-bottom: 4px !important; font-size: 0.95rem !important; }
+        
+        .btn-filter-group { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+        .btn-filter-group::-webkit-scrollbar { display: none; }
+        .btn-filter { background: var(--card-bg); border: 2px solid var(--border); color: var(--text-main); padding: 10px 20px; border-radius: 30px; font-size: 0.9rem; font-weight: 800; cursor: pointer; white-space: nowrap; transition: var(--transition-bounce); box-shadow: var(--shadow-sm); }
+        .btn-filter:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .btn-filter.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 12px var(--primary-glow); }
+
+        @media (max-width: 820px) {
+            html:not(.middle-mode), body:not(.middle-mode) { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100vh; width: 100%; }
+            .app-container:not(.middle-mode) { height: auto; min-height: 100vh; display: flex; flex-direction: column; width: 100%; }
+            
+            header:not(.middle-mode) { flex-wrap: wrap; height: auto; padding: 14px; gap: 12px; justify-content: space-between; }
+            .header-notice-section { order: 1; flex: 1; }
+            .header-actions { order: 2; }
+            .header-marquee-section { order: 3; width: 100%; height: auto; padding: 10px; }
+            .admin-marquee-controls { flex-wrap: wrap; justify-content: center; gap: 8px; }
+            .marquee-input { min-width: 100%; margin-bottom: 4px; }
+            .nav-tabs { order: 4; width: 100%; justify-content: space-between; overflow-x: auto; gap: 6px; padding-bottom: 2px; }
+            .tab-btn { flex: 1; text-align: center; padding: 10px 6px; white-space: nowrap; font-size: 0.9rem; }
+            
+            main:not(.middle-mode) { height: auto; flex: 1; padding: 12px; width: 100%; }
+            .tab-content.active:not(.middle-mode) { flex-direction: column; gap: 14px; }
+            
+            body:not(.middle-mode) .grid-container { flex: none; height: auto; min-height: 350px; padding: 14px; overflow-x: auto; overflow-y: hidden;}
+            body:not(.middle-mode) .seat-grid { min-width: 600px; overflow-y: auto; padding-bottom: 8px;}
+
+            .grid-header { flex-direction: column; gap: 12px; align-items: stretch; margin-bottom: 12px; }
+            .search-box { width: 100%; }
+            .search-input { width: 100%; padding: 12px 14px 12px 38px; }
+            .stat-badges { justify-content: space-around; flex-wrap: wrap; gap: 8px; }
+            
+            .control-panel:not(.middle-mode) { max-width: 100%; width: 100%; flex: none; min-height: 350px; padding: 16px; overflow-y: visible; }
+            
+            .settings-grid { grid-template-columns: 1fr; gap: 14px; }
+            .settings-card.full-width { grid-column: span 1; }
+            .settings-inner-grid { grid-template-columns: 1fr; gap: 10px; }
+            
+            .history-table-wrapper { overflow-x: auto; }
+            table { min-width: 550px; font-size: 0.9rem; }
+            
+            .modal-content { width: 95%; padding: 20px; margin: 16px 0; max-height: 90vh; overflow-y: auto; }
+            .btn-action { padding: 14px; font-size: 1rem; }
+            
+            .toast-notification, .undo-toast { width: 90%; flex-wrap: wrap; justify-content: center; text-align: center; bottom: 16px; }
+        }
+    
+    /* 모바일 소비자 전광판용 플로팅 전체화면 버튼 */
+    #customerFullscreenBtn { display:none; position:fixed; top:12px; right:12px; z-index:10050; border:1px solid rgba(255,255,255,.28); border-radius:999px; padding:11px 15px; color:#fff; background:rgba(15,23,42,.82); box-shadow:0 5px 18px rgba(0,0,0,.24); font-size:14px; font-weight:800; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); cursor:pointer; touch-action:manipulation; }
+    body.customer-mode #customerFullscreenBtn { display:inline-flex; align-items:center; gap:7px; }
+    body.customer-mode:fullscreen #customerFullscreenBtn { top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); }
+    @media (max-width: 700px) { body.customer-mode header { padding-top:52px !important; } #customerFullscreenBtn { font-size:13px; padding:10px 13px; } }
+
+</style>
+</head>
+<body>
+
+<!-- 패스워드 인증 모달 -->
+<div id="authModal" class="modal-overlay">
+    <div class="modal-content" style="text-align: center;">
+        <div style="font-size: 2.5rem; margin-bottom: 12px; animation: bounce 2s infinite;">🔒</div>
+        <h3 id="authTitle" style="margin-bottom: 10px;">패스워드 인증</h3>
+        <p id="authDesc" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">접근 비밀번호를 입력해주세요. (초기값: 0000)</p>
+        <div class="form-group" style="text-align: left;">
+            <label>비밀번호</label>
+            <input type="password" id="authPasswordInput" placeholder="비밀번호 입력" style="text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') submitPassword()">
+        </div>
+        <button class="btn-action btn-save" onclick="submitPassword()" style="margin-top: 10px;">인증하고 입장하기</button>
+    </div>
+</div>
+<style>@keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-12px);} 60% {transform: translateY(-6px);} }</style>
+
+<!-- 중간 관리자 전용 테이블 상세 관리 모달 -->
+<div id="middleActionModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalSeatTitle">🎪 테이블 관리</h3>
+            <button class="btn-close-modal" onclick="closeMiddleActionModal()">✕</button>
+        </div>
+        <div id="modalSeatBody" style="margin-bottom: 20px; font-size: 1rem; line-height: 1.7; background: var(--bg); padding: 14px; border-radius: 10px; border: 1px solid var(--border);"></div>
+        <div id="modalSeatActions" style="display: flex; flex-direction: column; gap: 10px;"></div>
+    </div>
+</div>
+
+<button id="customerFullscreenBtn" type="button" onclick="toggleCustomerFullscreen()" aria-label="전체화면 전환">⛶ 전체화면</button>
+<div class="app-container" id="mainAppContainer">
+    <header>
+        <div class="header-notice-section">
+            <span style="font-size: 1.25rem; transform: rotate(-10deg);">📢</span>
+            <input type="text" id="noticeInput" class="notice-input admin-only" value="🌿 풍향대동제, 틈: OTIUM" onchange="updateNotice(this.value)">
+            <div id="customerNoticeTitle" class="customer-notice-title" style="display: none;">🌿 풍향대동제, 틈: OTIUM</div>
+            <div id="middleModeHeaderTitle" class="middle-notice-title">👤 중간 관리자 현황판</div>
+        </div>
+
+        <div class="header-marquee-section">
+            <div class="admin-marquee-controls admin-only">
+                <span style="color:rgba(255,255,255,0.7); font-weight:800; font-size: 0.85rem;">📺 전광판:</span>
+                <input type="text" id="marqueeInput" class="marquee-input" value="[안내] 즐거운 축제 되세요!" onchange="updateMarquee(this.value)">
+                <button id="btnToggleMarquee" class="btn-toggle-marquee" onclick="toggleMarqueeBroadcast()">송출 켜기</button>
+            </div>
+            <div id="customerMarqueeContainer" class="customer-marquee-container">
+                <div id="customerMarqueeText" class="customer-marquee-text"></div>
+            </div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('grid')">🎪 좌석 현황</button>
+            <button class="tab-btn" onclick="switchTab('history')">📋 대여 내역</button>
+            <button class="tab-btn admin-only" onclick="switchTab('settings')">⚙️ 시스템 설정</button>
+        </div>
+
+        <div class="header-actions">
+            <button class="btn-header icon-only" id="btnDarkMode" onclick="toggleDarkMode()" title="테마 전환">🌙</button>
+            <button class="btn-header" style="background:linear-gradient(135deg, #059669, #047857); border:none; display:none; box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);" id="btnFullscreen" onclick="toggleFullscreen()">🖥️ 전체화면</button>
+            <input type="file" id="fileInput" style="display:none" accept=".json" onchange="importData(event)">
+        </div>
+    </header>
+
+    <main>
+        <!-- 좌석 현황 탭 -->
+        <div id="tab-grid" class="tab-content active">
+            <div class="grid-container">
+                <div class="stage-bar">STAGE (무대)</div>
+                <div class="grid-header">
+                    <div class="search-box admin-only">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="search-input" id="seatSearch" placeholder="이름 / 연락처 / 번호 (단축키: /)" oninput="handleSearch(this.value)">
+                    </div>
+                    <div class="stat-badges">
+                        <div class="stat-badge"><div class="dot" style="background:var(--rented-red);"></div><span style="color:var(--rented-red);">대여 중 <span id="stat-rented">0</span></span></div>
+                        <div class="stat-badge"><div class="dot" style="background:var(--maintenance-yellow);"></div><span style="color:var(--maintenance-yellow);">정비 중 <span id="stat-maint">0</span></span></div>
+                        <div class="stat-badge"><div class="dot" style="background:var(--expired-red);"></div><span style="color:var(--expired-red);">시간 초과 <span id="stat-expired">0</span></span></div>
+                    </div>
+                </div>
+                <div class="seat-grid" id="seatGrid"></div>
+            </div>
+
+            <div class="control-panel">
+                <div class="panel-title" id="panelTitle">👆 테이블을 선택하세요</div>
+                
+                <div id="emptyGuide" style="text-align:center; color:var(--text-muted); margin:auto 0; line-height: 1.7;">
+                    <div style="font-size: 3rem; margin-bottom:16px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">🎪</div>
+                    <strong style="font-size: 1.05rem; color:var(--text-main);">좌측 현황표에서 설정할<br>테이블 번호를 클릭해주세요.</strong><br><br>
+                    <span style="font-size:0.85rem; background: var(--bg); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">선택 해제 단축키 : ESC</span>
+                </div>
+
+                <div id="rentalForm" style="display:none;">
+                    <div class="form-group">
+                        <label>👤 대여자 성함 *</label>
+                        <input type="text" id="renterName" placeholder="예: 홍길동" onkeydown="if(event.key==='Enter') saveRental()">
+                    </div>
+                    <div class="form-group">
+                        <label>🪑 의자 수량 (개)</label>
+                        <input type="number" id="chairCount" min="0" value="4" onkeydown="if(event.key==='Enter') saveRental()">
+                    </div>
+                    <div class="form-group">
+                        <label>📱 연락처 (010부터 입력) *</label>
+                        <input type="tel" id="contactInfo" placeholder="01012345678" maxlength="11" onkeydown="if(event.key==='Enter') saveRental()">
+                    </div>
+
+                    <div class="form-group">
+                        <label>⏱️ 대여 시간 설정 *</label>
+                        <div class="time-options">
+                            <button type="button" class="btn-time active" onclick="setMinutes(0)">♾️ 무제한</button>
+                            <button type="button" class="btn-time" onclick="setMinutes(60)">1시간</button>
+                            <button type="button" class="btn-time" onclick="setMinutes(120)">2시간</button>
+                        </div>
+                        <input type="number" id="rentalMinutes" placeholder="직접 입력 (분 단위)" style="display:none; margin-top: 8px;" oninput="currentRentalMinutes = parseInt(this.value) || 0">
+                    </div>
+
+                    <button class="btn-action btn-save" onclick="saveRental()">💾 대여 시작 (알림톡 발송)</button>
+                    <button class="btn-action btn-maint" id="btnSetMaint" onclick="setMaintenance()" style="margin-top:10px;">🔧 정비 중으로 전환</button>
+                </div>
+
+                <div id="returnForm" style="display:none; text-align:center; margin:auto 0;">
+                    <div style="font-size:3rem; margin-bottom:14px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">📋</div>
+                    <div id="rentedUserInfo" style="font-size:1rem; font-weight:700; color:var(--text-main); margin-bottom:20px; line-height:1.7; background:var(--bg); padding:16px; border-radius:12px; border:2px solid var(--border); text-align: left; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);"></div>
+                    
+                    <button class="btn-action btn-maint" onclick="setMaintenance()" style="margin-bottom:10px;">🔧 정비 중으로 전환</button>
+                    <button class="btn-action btn-cancel" onclick="triggerReturn()">🔄 반납 처리</button>
+                </div>
+
+                <div id="maintForm" style="display:none; text-align:center; margin:auto 0;">
+                    <div style="font-size:3rem; margin-bottom:14px; animation: pulse-red 2s infinite;">🚧</div>
+                    <p style="font-size:1.1rem; font-weight:900; color:var(--maintenance-yellow); margin-bottom:10px;">현재 정비 중입니다.</p>
+                    <div id="maintRestoreInfo" style="font-size:0.9rem; color:var(--text-muted); margin-bottom:20px; line-height: 1.5; background: var(--bg); padding: 14px; border-radius: 10px;"></div>
+
+                    <button class="btn-action btn-save" onclick="restoreFromMaintenance()" style="background:linear-gradient(135deg, var(--primary), var(--primary-hover)); margin-bottom:10px;">✨ 기존 정보로 복구</button>
+                    <button class="btn-action" style="background:var(--border); color:var(--text-main);" onclick="clearMaintenance()">✨ 정비 완료 (빈 좌석 전환)</button>
+                </div>
+
+                <div class="admin-memo-section admin-only" style="margin-top: auto; padding-top: 18px; border-top: 2px dashed var(--border);">
+                    <div style="font-size: 0.9rem; font-weight: 800; color: var(--text-muted); margin-bottom: 10px; display:flex; align-items:center; gap:6px;">📝 관리자 메모</div>
+                    <textarea id="adminMemoInput" class="admin-memo-textarea" placeholder="특이사항이나 인수인계 내용을 입력하세요." style="width: 100%; height: 90px; padding: 12px; border: 2px solid var(--border); border-radius: 10px; font-size: 0.9rem; background: var(--bg); color: var(--text-main); resize: none; font-family: inherit; transition: var(--transition-smooth);" onchange="saveAdminMemo(this.value)"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- 독립된 중간 관리자 모드 전용 뷰 컨테이너 -->
+        <div id="middle-mode-container" class="tab-content" style="flex-direction: column; width: 100%; height: 100%;">
+            <div class="middle-mode-layout" style="display: flex; flex-direction: column; gap: 6px; width: 100%; height: 100%;">
+                
+                <div class="btn-filter-group">
+                    <button class="btn-filter active" onclick="setMiddleFilter('all', this)">전체 보기</button>
+                    <button class="btn-filter" onclick="setMiddleFilter('rented', this)">대여중 🔴</button>
+                    <button class="btn-filter" onclick="setMiddleFilter('maint', this)">정비중 🟡</button>
+                    <button class="btn-filter" onclick="setMiddleFilter('empty', this)">빈좌석 🟢</button>
+                </div>
+
+                <div class="grid-container" style="flex: none; max-height: 38vh;">
+                    <div class="stage-bar">STAGE (무대) - 중간 관리자 현황판</div>
+                    <div class="seat-grid" id="middleSeatGrid"></div>
+                </div>
+
+                <div class="control-panel" style="max-width: 100%; width: 100%; flex: 1;">
+                    <div class="panel-title" style="margin-bottom:6px; padding-bottom:4px; font-size:0.95rem;">👤 대여 및 정비 관리 (터치하여 관리)</div>
+                    
+                    <div style="font-size: 0.8rem; font-weight: 800; color: var(--text-muted); margin-bottom: 4px;">📋 대여 중 현황 (정보 보호 마스킹)</div>
+                    <div id="middleRentedList" class="middle-list-box" style="margin-bottom: 6px;"></div>
+
+                    <div style="font-size: 0.8rem; font-weight: 800; color: var(--text-muted); margin-bottom: 4px;">🔧 정비 중 테이블 목록</div>
+                    <div id="middleMaintList" class="middle-list-box"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 대여 내역 탭 -->
+        <div id="tab-history" class="tab-content">
+            <div class="history-container">
+                <div class="panel-title" style="margin-bottom:18px; border-bottom: none;">📋 대여 및 반납 기록 로그</div>
+                <div class="history-table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>타임스탬프 (일시)</th>
+                                <th>구분</th>
+                                <th>번호</th>
+                                <th>대여자</th>
+                                <th>연락처</th>
+                                <th>의자</th>
+                                <th>설정 시간</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 시스템 설정 탭 -->
+        <div id="tab-settings" class="tab-content" style="flex-direction: column; overflow-y: auto;">
+            <div class="history-container" style="max-width: 850px; margin: 0 auto; width: 100%;">
+                <div class="panel-title" style="margin-bottom: 20px;">⚙️ 시스템 및 관리 설정</div>
+                
+                <div class="settings-grid">
+                    
+                    <!-- 패스워드 설정 -->
+                    <div class="settings-card full-width">
+                        <div style="font-weight: 900; font-size: 1.05rem; margin-bottom: 14px; color: var(--text-main); display:flex; align-items:center; gap:8px;">🔐 패스워드 설정 (관리자 / 중간 관리자 분리)</div>
+                        <div class="settings-inner-grid">
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px;">관리자 패널 비밀번호</label>
+                                <input type="text" id="settingAdminPassword" placeholder="관리자 비밀번호" style="width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text-main); font-weight: 800;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px;">중간 관리자 패널 비밀번호</label>
+                                <input type="text" id="settingMiddlePassword" placeholder="중간 관리자 비밀번호" style="width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text-main); font-weight: 800;">
+                            </div>
+                        </div>
+                        <button class="btn-action btn-save" style="margin: 0; padding: 14px;" onclick="applyPasswordSettings()">💾 패스워드 변경사항 일괄 저장</button>
+                    </div>
+
+                    <!-- 1. 테이블 배치 및 통행로 설정 -->
+                    <div class="settings-card full-width">
+                        <div style="font-weight: 900; font-size: 1.05rem; margin-bottom: 14px; color: var(--text-main); display:flex; align-items:center; gap:8px;">📐 테이블 배치 및 통행로(Aisle) 설정</div>
+                        
+                        <div class="settings-inner-grid">
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px;">전체 가로 열 (Columns)</label>
+                                <input type="number" id="settingColsInput" min="1" max="30" style="width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text-main); font-weight: 800;" oninput="updateSettingCountingPreview()">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px;">세로 행 (Rows)</label>
+                                <input type="number" id="settingRowsInput" min="1" max="30" style="width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text-main); font-weight: 800;" oninput="updateSettingCountingPreview()">
+                            </div>
+                        </div>
+
+                        <div class="settings-inner-grid">
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px;">🚧 통행로 지정 열 (쉼표로 구분)</label>
+                                <input type="text" id="settingAisleColsInput" placeholder="예: 5, 10" style="width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text-main); font-weight: 800;" oninput="updateSettingCountingPreview()">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; font-weight: 800; color: var(--text-muted); margin-bottom: 6px;">📏 통행로 너비 비율 (기본 1)</label>
+                                <input type="number" id="settingAisleWidthInput" step="0.1" min="0.1" max="2" placeholder="예: 0.5 (절반 굵기)" style="width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text-main); font-weight: 800;" oninput="updateSettingCountingPreview()">
+                            </div>
+                        </div>
+
+                        <div style="background: var(--bg); padding: 14px 18px; border-radius: 10px; border: 2px solid var(--border); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <span style="font-size: 0.9rem; font-weight: 800; color: var(--text-muted);">실제 테이블 카운팅 프리뷰:</span>
+                            <span id="countingPreviewText" style="font-size: 1.05rem; font-weight: 900; color: var(--primary);">실제 테이블 0열 × 0행 = 총 0석</span>
+                        </div>
+
+                        <button class="btn-action btn-save" style="margin: 0; padding: 14px;" onclick="applyGridSettings()">💾 그리드 및 통행로 설정 적용하기</button>
+                    </div>
+
+                    <!-- 2. 전광판 및 모드 화면 관리 -->
+                    <div class="settings-card">
+                        <div style="font-weight: 900; font-size: 1.05rem; margin-bottom: 8px; color: var(--text-main); display:flex; align-items:center; gap:8px;">📺 전광판 및 관리자 화면 관리</div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">소비자 전광판이나 모바일용 중간 관리자 현황판 새 창을 띄웁니다. (단축키: <b>Alt + C</b>로 전광판 즉시 열기 가능)</p>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="btn-action" style="margin:0; background:var(--bg); color:var(--text-main); border:2px solid var(--border);" onclick="openCustomerWindow()">📺 소비자 전광판 화면 열기 (Alt+C)</button>
+                            <button class="btn-action" style="margin:0; background:var(--bg); color:var(--text-main); border:2px solid var(--border);" onclick="openMiddleManagerWindow()">👤 중간 관리자 현황판 열기 (모바일용)</button>
+                            <button class="btn-action" style="margin:0; background:var(--bg); color:var(--text-main); border:2px solid var(--border);" onclick="openSlideModal()">🖼️ 홍보 슬라이드(사진) 설정</button>
+                        </div>
+                    </div>
+
+                    <!-- 3. 카카오 알림톡 관리 -->
+                    <div class="settings-card">
+                        <div style="font-weight: 900; font-size: 1.05rem; margin-bottom: 8px; color: var(--text-main); display:flex; align-items:center; gap:8px;">💬 카카오 알림톡 설정</div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">대여 및 반납 시 사용자에게 카카오톡 메시지를 전송하기 위한 API 연동을 설정합니다.</p>
+                        <div style="display: flex; flex-direction: column; gap: 10px; height: 100%; justify-content: flex-start;">
+                            <button class="btn-action" style="margin:0; background:var(--bg); color:var(--text-main); border:2px solid var(--border);" onclick="openKakaoModal()">⚙️ 솔라피(Solapi) API 설정</button>
+                        </div>
+                    </div>
+
+                    <!-- 4. 데이터 관리 (백업/복원) -->
+                    <div class="settings-card full-width">
+                        <div style="font-weight: 900; font-size: 1.05rem; margin-bottom: 8px; color: var(--text-main); display:flex; align-items:center; gap:8px;">💾 데이터 관리 (백업/불러오기)</div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">현재의 대여 현황 및 모든 시스템 설정을 파일로 백업하거나 불러옵니다.</p>
+                        <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                            <button class="btn-action" style="margin:0; flex:1; background:var(--bg); color:var(--text-main); border:2px solid var(--border); min-width: 140px;" onclick="exportData()">내보내기</button>
+                            <button class="btn-action" style="margin:0; flex:1; background:var(--bg); color:var(--text-main); border:2px solid var(--border); min-width: 140px;" onclick="document.getElementById('fileInput').click()">불러오기</button>
+                        </div>
+                    </div>
+
+                    <!-- 5. 전체 초기화 -->
+                    <div class="settings-card danger full-width">
+                        <div style="font-weight: 900; font-size: 1.05rem; color: var(--expired-red); margin-bottom: 8px; display:flex; align-items:center; gap:8px;">⚠️ 위험 구역 (전체 초기화)</div>
+                        <p style="font-size: 0.85rem; color: #9f1239; margin-bottom: 16px; line-height: 1.5;">모든 대여 내역 및 로그, 시스템 설정을 초기 상태로 완전히 되돌립니다.</p>
+                        <button class="btn-action btn-cancel" style="margin:0; padding: 14px;" onclick="resetAllData()">🚨 전체 데이터 초기화</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div id="undoToast" class="undo-toast">
+    <span id="undoToastMsg">테이블 반납 처리 대기 중... (5초)</span>
+    <button class="btn-undo" onclick="undoReturn()">↩️ 되돌리기</button>
+</div>
+
+<div id="toast" class="toast-notification"><span style="font-size:1.2rem;">✨</span> <span id="toast-msg">메시지</span></div>
+<div id="customerSlideOverlay"><img id="customerSlideImg" src="" alt="홍보 이미지"></div>
+
+<!-- 슬라이드 모달 -->
+<div id="slideModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header"><h3>🖼️ 전광판 홍보 설정</h3><button class="btn-close-modal" onclick="closeSlideModal()">✕</button></div>
+        
+        <label style="display:flex; align-items:center; gap:10px; margin-bottom:20px; padding:14px; background:var(--bg); border-radius:10px; border:2px solid var(--border); font-weight:800; cursor:pointer; transition:var(--transition-smooth);">
+            <input type="checkbox" id="slideActiveCheck" style="width:18px; height:18px; accent-color:var(--primary);">
+            홍보 슬라이드 자동 재생 활성화 (ON)
+        </label>
+
+        <div class="form-group">
+            <label>⏱️ 전환 시간 (초)</label>
+            <input type="number" id="slideIntervalInput" value="5">
+        </div>
+        <div class="form-group">
+            <label>📸 사진 업로드</label>
+            <input type="file" id="slideImageUploader" accept="image/*" multiple onchange="handleImageUpload(event)" style="background:transparent; border:none; padding:0; font-size:0.9rem;">
+            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:6px;">📺 4K 전광판용 고화질 처리 · 최대 3840px 유지 · 가능한 경우 원본 화질 유지</div>
+        </div>
+        <div class="image-preview-list" id="imagePreviewList"></div>
+        <div style="display:flex; gap:14px; margin-top:24px;">
+            <button class="btn-action btn-save" onclick="saveSlideSettings()">저장하기</button>
+            <button class="btn-action" style="background:var(--bg); border:2px solid var(--border); color:var(--text-main);" onclick="closeSlideModal()">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 알림톡 모달 -->
+<div id="kakaoModal" class="modal-overlay">
+    <div class="modal-content" style="width:520px;">
+        <div class="modal-header"><h3>💬 알림톡 설정 (HTML 직접 연동)</h3><button class="btn-close-modal" onclick="closeKakaoModal()">✕</button></div>
+        
+        <label style="display:flex; align-items:center; gap:10px; margin-bottom:20px; padding:14px; background:var(--bg); border-radius:10px; border:2px solid var(--border); font-weight:800; cursor:pointer; transition:var(--transition-smooth);">
+            <input type="checkbox" id="kakaoActiveCheck" style="width:18px; height:18px; accent-color:var(--primary);">
+            알림톡 자동 발송 활성화
+        </label>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+            <div class="form-group"><label>API Key</label><input type="text" id="solapiApiKey" placeholder="SOLAPI API Key 입력"></div>
+            <div class="form-group"><label>API Secret</label><input type="password" id="solapiApiSecret" placeholder="API Secret 입력"></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+            <div class="form-group"><label>발신 번호 (숫자만)</label><input type="tel" id="solapiSender" placeholder="예: 01012345678"></div>
+            <div class="form-group"><label>PFID</label><input type="text" id="solapiPfid"></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+            <div class="form-group"><label>대여 템플릿 ID</label><input type="text" id="solapiTplStart"></div>
+            <div class="form-group"><label>반납 템플릿 ID</label><input type="text" id="solapiTplReturn"></div>
+        </div>
+        <div style="display:flex; gap:14px; margin-top:20px;">
+            <button class="btn-action btn-save" onclick="saveKakaoSettings()">저장하기</button>
+            <button class="btn-action" style="background:var(--bg); border:2px solid var(--border); color:var(--text-main);" onclick="closeKakaoModal()">닫기</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // =====================================================================
+    // 1. Firebase 설정
+    // =====================================================================
+    const firebaseConfig = {
+        apiKey: "AIzaSyAsCYGgNerrc0h4jjDntSzWn4UaRWwcarY",
+        authDomain: "table-le.firebaseapp.com",
+        databaseURL: "https://table-le-default-rtdb.firebaseio.com",
+        projectId: "table-le",
+        storageBucket: "table-le.firebasestorage.app",
+        messagingSenderId: "620114388851",
+        appId: "1:620114388851:web:88dbcd6545be16838b0706",
+        measurementId: "G-T8NQBF8SM0"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // =====================================================================
+    // 2. 전역 상태 변수
+    // =====================================================================
+    let rentalData = {};
+    let rentalLogs = [];
+    
+    let GRID_COLS = 10;
+    let GRID_ROWS = 9;
+    let AISLE_COLS = [];
+    
+    let noticeTitle = "🌿 풍향대동제, 틈: OTIUM";
+    let marqueeText = "[안내] 즐거운 축제 되세요!";
+    let isMarqueeActive = false;
+    let adminMemoText = "";
+    
+    let adminPassword = "0000";
+    let middlePassword = "0000";
+
+    let slideConfig = { active: true, interval: 5, images: [] };
+    let tempImages = [];
+
+    // ================================================================
+    // SOLAPI 알림톡 - HTML 직접 연동 설정
+    // ※ Vercel 환경변수/ENV/API 폴더를 사용하지 않습니다.
+    // ※ 아래 값은 실제 SOLAPI 값으로 입력하면 됩니다.
+    // ================================================================
+    const DIRECT_SOLAPI_CONFIG = {
+        active: true,
+        apiKey: 'NCSDNT800ZYQ9CSG',
+        apiSecret: 'T9C8UPUQR87UWAUH2C4JG4GF8K7EOJUO',
+        sender: '01062158036',
+        pfid: 'KA01PF260914165156466fMFWqipUAxY',
+        tplStart: 'KA01TP260914170657152uAAq3ysJgNP',
+        tplReturn: 'KA01TP260914170302103InvZ7mwfLru'
+    };
+
+    let kakaoConfig = { ...DIRECT_SOLAPI_CONFIG };
+
+    const DARK_MODE_KEY = 'FESTIVAL_DARK_MODE_V10';
+    let isDarkMode = localStorage.getItem(DARK_MODE_KEY) === 'true';
+
+    let selectedSeat = null;
+    let searchQuery = '';
+    let currentRentalMinutes = 0;
+    let currentMiddleFilter = 'all'; 
+    
+    let pendingReturn = null;
+    let pendingReturnTimer = null;
+    let currentSlideIndex = 0;
+    let slideTimer = null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const isCustomerMode = urlParams.get('mode') === 'customer';
+    const isMiddleMode = urlParams.get('mode') === 'middle';
+
+    let currentAuthTarget = isMiddleMode ? 'middle' : 'admin';
+
+    const seatGrid = document.getElementById('seatGrid');
+    const middleSeatGrid = document.getElementById('middleSeatGrid');
+    const panelTitle = document.getElementById('panelTitle');
+    const emptyGuide = document.getElementById('emptyGuide');
+    const rentalForm = document.getElementById('rentalForm');
+    const returnForm = document.getElementById('returnForm');
+    const maintForm = document.getElementById('maintForm');
+    
+    function init() {
+        applyDarkModeUI();
+        
+        if (isCustomerMode) {
+            document.body.classList.add('customer-mode');
+            document.getElementById('btnFullscreen').style.display = 'inline-flex';
+        } else if (isMiddleMode) {
+            document.body.classList.add('middle-mode');
+            document.getElementById('middleModeHeaderTitle').style.display = 'block';
+            document.getElementById('noticeInput').style.display = 'none';
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('middle-mode-container').classList.add('active');
+        }
+
+        checkAuthSession();
+
+        setInterval(() => {
+            renderGrid();
+            renderMiddleGrid();
+        }, 1000);
+    }
+
+    // =====================================================================
+    // 3. 패스워드 인증 및 세션 제어
+    // =====================================================================
+    const authModal = document.getElementById('authModal');
+    const authPasswordInput = document.getElementById('authPasswordInput');
+    const authTitle = document.getElementById('authTitle');
+    const authDesc = document.getElementById('authDesc');
+
+    db.ref('settings').on('value', (snapshot) => {
+        const s = snapshot.val() || {};
+        
+        GRID_COLS = s.GRID_COLS || 10;
+        GRID_ROWS = s.GRID_ROWS || 9;
+        AISLE_COLS = s.AISLE_COLS || [];
+        
+        noticeTitle = s.noticeTitle || "🌿 풍향대동제, 틈: OTIUM";
+        marqueeText = s.marqueeText || "[안내] 즐거운 축제 되세요!";
+        isMarqueeActive = s.isMarqueeActive || false;
+        adminMemoText = s.adminMemoText || "";
+        slideConfig = s.slideConfig || { active: true, interval: 5, images: [] };
+        // 알림톡 자격증명은 Firebase/LocalStorage가 덮어쓰지 않도록
+        // 이 HTML의 DIRECT_SOLAPI_CONFIG를 단일 진실 공급원으로 사용합니다.
+        kakaoConfig = { ...DIRECT_SOLAPI_CONFIG };
+        
+        adminPassword = s.adminPassword || "0000";
+        middlePassword = s.middlePassword || "0000";
+
+        document.getElementById('noticeInput').value = noticeTitle; 
+        document.getElementById('customerNoticeTitle').innerText = noticeTitle;
+        document.getElementById('marqueeInput').value = marqueeText; 
+        document.getElementById('customerMarqueeText').innerText = marqueeText;
+        document.getElementById('adminMemoInput').value = adminMemoText; 
+        
+        document.getElementById('settingColsInput').value = GRID_COLS;
+        document.getElementById('settingRowsInput').value = GRID_ROWS;
+        document.getElementById('settingAisleColsInput').value = AISLE_COLS.map(a => a.col).join(', ');
+        document.getElementById('settingAisleWidthInput').value = AISLE_COLS.length > 0 ? AISLE_COLS[0].width : 1;
+
+        document.getElementById('settingAdminPassword').value = adminPassword;
+        document.getElementById('settingMiddlePassword').value = middlePassword;
+        
+        updateSettingCountingPreview();
+        updateMarqueeUI(); 
+        renderGrid();
+        renderMiddleGrid();
+        
+        if (isMiddleMode) {
+            renderMiddleManagerPanel();
+        }
+
+        if (isCustomerMode) startCustomerSlideLoop();
+    });
+
+    function checkAuthSession() {
+        if (isCustomerMode) {
+            authModal.classList.remove('active');
+            return;
+        }
+
+        const sessionKey = currentAuthTarget === 'middle' ? 'auth_middle_verified' : 'auth_admin_verified';
+        if (sessionStorage.getItem(sessionKey) === 'true') {
+            authModal.classList.remove('active');
+        } else {
+            if (currentAuthTarget === 'middle') {
+                authTitle.innerText = "👤 중간 관리자 현황판 인증";
+                authDesc.innerText = "중간 관리자 접근 비밀번호를 입력해주세요. (초기값: 0000)";
+            } else {
+                authTitle.innerText = "🔐 총괄 관리자 패널 인증";
+                authDesc.innerText = "관리자 시스템 접근 비밀번호를 입력해주세요. (초기값: 0000)";
+            }
+            authModal.classList.add('active');
+            setTimeout(() => authPasswordInput.focus(), 100);
+        }
+    }
+
+    function submitPassword() {
+        const inputVal = authPasswordInput.value.trim();
+        const targetPassword = currentAuthTarget === 'middle' ? middlePassword : adminPassword;
+        const sessionKey = currentAuthTarget === 'middle' ? 'auth_middle_verified' : 'auth_admin_verified';
+
+        if (inputVal === targetPassword) {
+            sessionStorage.setItem(sessionKey, 'true');
+            authModal.classList.remove('active');
+            authPasswordInput.value = '';
+            showToast("✨ 인증되었습니다.");
+
+            if (isMiddleMode) {
+                renderMiddleGrid();
+                renderMiddleManagerPanel();
+            }
+        } else {
+            showToast("⚠️ 비밀번호가 일치하지 않습니다.");
+            authPasswordInput.value = '';
+            authPasswordInput.focus();
+        }
+    }
+
+    function applyPasswordSettings() {
+        const newAdminPwd = document.getElementById('settingAdminPassword').value.trim();
+        const newMiddlePwd = document.getElementById('settingMiddlePassword').value.trim();
+
+        if (!newAdminPwd || !newMiddlePwd) {
+            return showToast("⚠️ 비밀번호는 공백일 수 없습니다.");
+        }
+
+        adminPassword = newAdminPwd;
+        middlePassword = newMiddlePwd;
+        saveSettingsToDB();
+        showToast("🔐 패스워드 변경 완료 (모든 탭 동기화됨)");
+    }
+
+    db.ref('rentalData').on('value', (snapshot) => {
+        rentalData = snapshot.val() || {};
+        renderGrid();
+        renderMiddleGrid();
+        if (selectedSeat) selectSeat(selectedSeat);
+        if (isMiddleMode) {
+            renderMiddleManagerPanel();
+        }
+    });
+
+    db.ref('rentalLogs').on('value', (snapshot) => {
+        rentalLogs = snapshot.val() || [];
+        renderHistory();
+    });
+
+    function saveSettingsToDB() {
+        // SOLAPI API Key/Secret은 Firebase에 저장하지 않습니다.
+        // 알림톡 설정은 HTML의 DIRECT_SOLAPI_CONFIG에서만 관리합니다.
+        db.ref('settings').set({
+            GRID_COLS, GRID_ROWS, AISLE_COLS,
+            noticeTitle, marqueeText, isMarqueeActive,
+            adminMemoText, slideConfig,
+            adminPassword, middlePassword
+        });
+    }
+
+    // =====================================================================
+    // 4. 중간 관리자 현황판 및 그리드 렌더링
+    // =====================================================================
+    function setMiddleFilter(filterType, btnElem) {
+        currentMiddleFilter = filterType;
+        document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
+        btnElem.classList.add('active');
+        renderMiddleGrid();
+    }
+
+    function renderMiddleGrid() {
+        if (!middleSeatGrid) return;
+        middleSeatGrid.innerHTML = '';
+        
+        middleSeatGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(46px, 1fr))';
+        middleSeatGrid.style.gridTemplateRows = 'auto';
+        middleSeatGrid.style.gap = '5px'; 
+        
+        const now = Date.now();
+        let seatCounter = 1;
+        let validSeats = [];
+
+        for (let r = 1; r <= GRID_ROWS; r++) {
+            for (let c = 1; c <= GRID_COLS; c++) {
+                let matchedAisle = AISLE_COLS.find(a => a.col === c);
+                if (!matchedAisle) {
+                    validSeats.push(seatCounter++);
+                }
+            }
+        }
+
+        validSeats.forEach(i => {
+            const data = rentalData[i];
+            let statusClass = ''; let timerText = '빈좌석';
+            let isMatchFilter = true;
+
+            if (data) {
+                if (data.type === 'MAINTENANCE') {
+                    statusClass = 'maintenance'; timerText = '정비중';
+                    if (currentMiddleFilter === 'rented' || currentMiddleFilter === 'empty') isMatchFilter = false;
+                } else {
+                    statusClass = 'rented';
+                    if (currentMiddleFilter === 'maint' || currentMiddleFilter === 'empty') isMatchFilter = false;
+                    
+                    if (data.isUnlimited || !data.endTime) {
+                        timerText = '대여중'; 
+                    } else {
+                        const remainingSec = Math.floor((data.endTime - now) / 1000);
+                        if (remainingSec <= 0) {
+                            statusClass = 'expired'; timerText = '초과';
+                        } else {
+                            const m = Math.floor(remainingSec / 60);
+                            timerText = `${m}분`;
+                        }
+                    }
+                }
+            } else {
+                if (currentMiddleFilter === 'rented' || currentMiddleFilter === 'maint') isMatchFilter = false;
+            }
+
+            const cell = document.createElement('div');
+            cell.className = `seat-card ${statusClass} ${!isMatchFilter ? 'dimmed' : ''}`;
+            cell.onclick = () => openMiddleActionModal(i);
+            cell.innerHTML = `<div class="seat-num" style="font-size:0.8rem; margin-bottom:2px;">${i}</div><div class="seat-timer" style="font-size:0.55rem; padding:2px 5px;">${timerText}</div>`;
+            middleSeatGrid.appendChild(cell);
+        });
+    }
+
+    function openMiddleActionModal(seatNum) {
+        if (!isMiddleMode) return;
+        const modal = document.getElementById('middleActionModal');
+        const titleElem = document.getElementById('modalSeatTitle');
+        const bodyElem = document.getElementById('modalSeatBody');
+        const actionsElem = document.getElementById('modalSeatActions');
+
+        titleElem.innerText = `🎪 ${seatNum}번 테이블 관리`;
+        const data = rentalData[seatNum];
+
+        if (!data) {
+            bodyElem.innerHTML = `현재 <b>${seatNum}번</b> 테이블은 <b>[빈 좌석]</b>입니다.`;
+            actionsElem.innerHTML = `
+                <button class="btn-action btn-maint" onclick="middleSetMaintenance(${seatNum})">🔧 정비 중으로 전환</button>
+                <button class="btn-action" style="background:var(--bg); border:2px solid var(--border); color:var(--text-main);" onclick="closeMiddleActionModal()">닫기</button>
+            `;
+        } else if (data.type === 'MAINTENANCE') {
+            bodyElem.innerHTML = `현재 <b>${seatNum}번</b> 테이블은 <b style="color:var(--maintenance-yellow);">[정비 중]</b>입니다.`;
+            actionsElem.innerHTML = `
+                <button class="btn-action btn-save" onclick="middleClearMaintenance(${seatNum})">✨ 정비 완료 (빈 좌석 전환)</button>
+                <button class="btn-action" style="background:var(--bg); border:2px solid var(--border); color:var(--text-main);" onclick="closeMiddleActionModal()">닫기</button>
+            `;
+        } else if (data.type === 'RENT') {
+            bodyElem.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span><b>대여자:</b></span> <span>${data.name}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span><b>연락처:</b></span> <span>${data.contact}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;"><span><b>의자 수:</b></span> <span>${data.chairs}개</span></div>
+                <div style="display:flex; justify-content:space-between;"><span><b>대여 형태:</b></span> <span>${data.duration}</span></div>
+            `;
+            actionsElem.innerHTML = `
+                <div style="font-size:0.85rem; color:var(--rented-red); font-weight:800; text-align:center; padding:10px; background:rgba(244,63,94,0.1); border-radius:10px; margin-bottom:4px;">🔒 대여 중인 테이블은 반납 및 정비 전환이 불가합니다.</div>
+                <button class="btn-action" style="background:var(--bg); border:2px solid var(--border); color:var(--text-main);" onclick="closeMiddleActionModal()">닫기</button>
+            `;
+        }
+
+        modal.classList.add('active');
+    }
+
+    function closeMiddleActionModal() {
+        document.getElementById('middleActionModal').classList.remove('active');
+    }
+
+    function middleSetMaintenance(seatNum) {
+        const currentData = rentalData[seatNum];
+        let prevRentalInfo = null;
+        if (currentData && currentData.type === 'RENT') prevRentalInfo = { ...currentData };
+        rentalData[seatNum] = { type: 'MAINTENANCE', prevRental: prevRentalInfo };
+        db.ref('rentalData').set(rentalData);
+        closeMiddleActionModal();
+        showToast(`🔧 ${seatNum}번 테이블 정비 중 전환`);
+    }
+
+    function middleClearMaintenance(seatNum) {
+        delete rentalData[seatNum];
+        db.ref('rentalData').set(rentalData);
+        closeMiddleActionModal();
+        showToast(`✨ ${seatNum}번 테이블 정비 완료`);
+    }
+
+    function renderMiddleManagerPanel() {
+        const rentedListContainer = document.getElementById('middleRentedList');
+        const maintListContainer = document.getElementById('middleMaintList');
+        if (!rentedListContainer || !maintListContainer) return;
+        rentedListContainer.innerHTML = '';
+        maintListContainer.innerHTML = '';
+
+        let rentedList = [];
+        let maintList = [];
+
+        for (let seatNum in rentalData) {
+            const d = rentalData[seatNum];
+            if (d.type === 'RENT') {
+                rentedList.push({ seatNum, ...d });
+            } else if (d.type === 'MAINTENANCE') {
+                maintList.push({ seatNum, ...d });
+            }
+        }
+
+        if (rentedList.length === 0) {
+            rentedListContainer.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:10px; font-size:0.8rem; background:var(--bg); border-radius:8px; border:1px solid var(--border);">대여 중인 테이블이 없습니다.</div>`;
+        } else {
+            rentedList.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'middle-item-row';
+                row.onclick = () => openMiddleActionModal(item.seatNum);
+                row.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <strong style="color:var(--primary); font-size:0.9rem;">${item.seatNum}번</strong>
+                        <span style="font-weight:700; font-size:0.85rem;">${maskName(item.name)}</span>
+                    </div>
+                    <span style="font-family:monospace; color:var(--text-muted); font-size:0.8rem;">${maskPhone(item.contact)}</span>
+                `;
+                rentedListContainer.appendChild(row);
+            });
+        }
+
+        if (maintList.length === 0) {
+            maintListContainer.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding:10px; font-size:0.8rem; background:var(--bg); border-radius:8px; border:1px solid var(--border);">정비 중인 테이블이 없습니다.</div>`;
+        } else {
+            maintList.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'middle-item-row';
+                row.onclick = () => openMiddleActionModal(item.seatNum);
+                row.innerHTML = `
+                    <strong style="color:var(--maintenance-yellow); font-size:0.9rem;">${item.seatNum}번 테이블</strong>
+                    <button class="btn-action btn-save" style="margin:0; padding:5px 12px; font-size:0.75rem; border-radius:6px; width:auto; flex-shrink:0; box-shadow:none;" onclick="event.stopPropagation(); clearMaintenanceDirect(${item.seatNum})">정비 완료</button>
+                `;
+                maintListContainer.appendChild(row);
+            });
+        }
+    }
+
+    function maskName(name) {
+        if (!name) return '';
+        if (name.length === 2) return name[0] + '*';
+        if (name.length >= 3) return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
+        return '*';
+    }
+
+    function maskPhone(phone) {
+        if (!phone || phone.length < 4) return '****';
+        const last4 = phone.slice(-4);
+        return `****-****-${last4}`;
+    }
+
+    function clearMaintenanceDirect(seatNum) {
+        delete rentalData[seatNum];
+        db.ref('rentalData').set(rentalData);
+        showToast(`✨ ${seatNum}번 테이블 정비 완료 처리되었습니다.`);
+        renderMiddleManagerPanel();
+    }
+
+    // =====================================================================
+    // 5. 단축키 설정 (Alt + C 전광판 열기 추가, ESC, / 단축키 유지)
+    // =====================================================================
+    document.addEventListener('keydown', (e) => {
+        // Alt + C: 소비자 전광판 창 열기
+        if (e.altKey && (e.key === 'c' || e.key === 'C' || e.code === 'KeyC')) {
+            e.preventDefault();
+            openCustomerWindow();
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            const modals = document.querySelectorAll('.modal-overlay.active');
+            if (modals.length > 0) {
+                modals.forEach(m => m.classList.remove('active'));
+            } else if (selectedSeat) {
+                selectedSeat = null; resetPanel(); renderGrid();
+            }
+        }
+        if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            document.getElementById('seatSearch').focus();
+        }
+    });
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-msg').innerText = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function playAlarmSound() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 0.6);
+        } catch (e) {}
+    }
+
+    // =====================================================================
+    // 6. 그리드 렌더링 및 검색, 대여/반납 로직 (DB 연동)
+    // =====================================================================
+    function renderGrid() {
+        seatGrid.innerHTML = '';
+        
+        let colTracks = [];
+        for (let c = 1; c <= GRID_COLS; c++) {
+            let matchedAisle = AISLE_COLS.find(a => a.col === c);
+            colTracks.push(matchedAisle ? `${matchedAisle.width}fr` : '1fr');
+        }
+
+        seatGrid.style.gridTemplateColumns = colTracks.join(' ');
+        seatGrid.style.gridTemplateRows = `repeat(${GRID_ROWS}, 1fr)`;
+        
+        const isDense = (GRID_COLS * GRID_ROWS) > 110;
+        const numSize = isDense ? '0.85rem' : '1rem';
+        const timerSize = isDense ? '0.7rem' : '0.8rem';
+
+        const now = Date.now();
+        let rentedCount = 0, maintCount = 0, expiredCount = 0;
+        let seatCounter = 1;
+        let needsDbUpdate = false;
+
+        for (let r = 1; r <= GRID_ROWS; r++) {
+            for (let c = 1; c <= GRID_COLS; c++) {
+                let matchedAisle = AISLE_COLS.find(a => a.col === c);
+                const cell = document.createElement('div');
+
+                if (matchedAisle) {
+                    cell.className = 'aisle-cell';
+                    if (r === Math.ceil(GRID_ROWS / 2)) cell.innerText = '통행로';
+                    seatGrid.appendChild(cell);
+                } else {
+                    const i = seatCounter++;
+                    const data = rentalData[i];
+                    let statusClass = ''; let timerText = '비어있음';
+
+                    if (pendingReturn && pendingReturn.seatNum === i) {
+                        // 반납 대기 중
+                    } else if (data) {
+                        if (data.type === 'MAINTENANCE') {
+                            statusClass = 'maintenance'; timerText = '🔧 정비 중';
+                            maintCount++;
+                        } else {
+                            statusClass = 'rented';
+                            rentedCount++;
+                            if (data.isUnlimited || !data.endTime) {
+                                timerText = '대여중'; 
+                            } else {
+                                const remainingSec = Math.floor((data.endTime - now) / 1000);
+                                if (remainingSec <= 0) {
+                                    statusClass = 'expired'; timerText = '시간초과';
+                                    expiredCount++; rentedCount--;
+                                    if (!data.notified) {
+                                        data.notified = true; 
+                                        needsDbUpdate = true;
+                                        playAlarmSound();
+                                    }
+                                } else {
+                                    const m = Math.floor(remainingSec / 60); const s = remainingSec % 60;
+                                    timerText = `${m}분 ${s < 10 ? '0' : ''}${s}초`;
+                                }
+                            }
+                        }
+                    }
+
+                    // 🚨 클래스 초기화
+                    cell.className = `seat-card ${statusClass} ${selectedSeat === i ? 'selected' : ''}`;
+
+                    // 🚨 정상 작동하는 검색(Dim & Match) 로직
+                    if (searchQuery.length > 0) {
+                        let isMatch = false;
+                        if (i.toString() === searchQuery) isMatch = true;
+                        if (data && data.name && data.name.toLowerCase().includes(searchQuery)) isMatch = true;
+                        if (data && data.contact && data.contact.includes(searchQuery)) isMatch = true;
+                        
+                        if (isMatch) cell.classList.add('search-match');
+                        else cell.classList.add('dimmed');
+                    }
+
+                    cell.onclick = () => selectSeat(i);
+                    cell.innerHTML = `<div class="seat-num" style="font-size:${numSize};">${i}</div><div class="seat-timer" style="font-size:${timerSize};">${timerText}</div>`;
+                    seatGrid.appendChild(cell);
+                }
+            }
+        }
+
+        document.getElementById('stat-rented').innerText = rentedCount;
+        document.getElementById('stat-maint').innerText = maintCount;
+        document.getElementById('stat-expired').innerText = expiredCount;
+
+        if (needsDbUpdate) {
+            db.ref('rentalData').set(rentalData);
+        }
+    }
+
+    function resetPanel() {
+        emptyGuide.style.display = 'block'; 
+        rentalForm.style.display = 'none'; 
+        returnForm.style.display = 'none';
+        maintForm.style.display = 'none';
+        panelTitle.innerHTML = "👆 테이블을 선택하세요";
+    }
+
+    function selectSeat(num) {
+        if (isCustomerMode || isMiddleMode) return;
+        selectedSeat = num; renderGrid();
+        emptyGuide.style.display = 'none';
+        panelTitle.innerHTML = `<span style="color:var(--primary); font-size:1.35rem; filter:drop-shadow(0 2px 4px rgba(99,102,241,0.3));">${num}번</span> <span style="font-weight:800;">테이블 설정</span>`;
+
+        const d = rentalData[num];
+        
+        rentalForm.style.display = 'none';
+        returnForm.style.display = 'none';
+        maintForm.style.display = 'none';
+
+        if (d && d.type === 'MAINTENANCE') {
+            maintForm.style.display = 'block';
+            const restoreInfo = document.getElementById('maintRestoreInfo');
+            if (d.prevRental) {
+                restoreInfo.innerHTML = `이전 대여자: <b>${d.prevRental.name}</b> (${d.prevRental.contact})<br>정비 완료 시 기존 정보로 복구할 수 있습니다.`;
+            } else {
+                restoreInfo.innerHTML = `기존 대여 기록이 없는 빈 테이블입니다.`;
+            }
+        } else if (d && d.type === 'RENT') {
+            returnForm.style.display = 'block';
+            document.getElementById('rentedUserInfo').innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px;"><span><b>대여자:</b></span> <span style="font-size:1.05rem;">${d.name}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px;"><span><b>연락처:</b></span> <span style="color:var(--primary);">${d.contact}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:6px;"><span><b>의자 수:</b></span> <span>${d.chairs}개</span></div>
+                <div style="display:flex; justify-content:space-between;"><span><b>대여 형태:</b></span> <span>${d.duration}</span></div>
+            `;
+        } else {
+            rentalForm.style.display = 'block';
+            document.getElementById('renterName').value = ''; 
+            document.getElementById('chairCount').value = '4'; 
+            document.getElementById('contactInfo').value = '010';
+            setMinutes(0);
+            setTimeout(() => document.getElementById('renterName').focus(), 50);
+        }
+    }
+
+    function saveRental() {
+        if (!selectedSeat) return showToast("테이블을 선택해주세요.");
+        const name = document.getElementById('renterName').value.trim(); 
+        const contact = document.getElementById('contactInfo').value.trim();
+        
+        let duration = currentRentalMinutes;
+        const customMinutesInput = document.getElementById('rentalMinutes');
+        if (customMinutesInput.style.display !== 'none' && customMinutesInput.value) {
+            duration = parseInt(customMinutesInput.value) || 0;
+        }
+
+        const isUnlimited = (duration === 0); 
+
+        if (!name) return showToast("대여자 성함을 입력해주세요.");
+        if (contact.length < 10) return showToast("연락처를 정확히 입력해주세요.");
+
+        const endTime = isUnlimited ? null : Date.now() + (duration * 60 * 1000);
+
+        rentalData[selectedSeat] = {
+            type: 'RENT', name: name, chairs: document.getElementById('chairCount').value, contact: contact,
+            isUnlimited: isUnlimited, duration: isUnlimited ? '무제한' : `${duration}분`, endTime: endTime, notified: false
+        };
+
+        addLog('RENT', selectedSeat, name, contact, rentalData[selectedSeat].chairs, isUnlimited ? '무제한' : `${duration}분`);
+        db.ref('rentalData').set(rentalData); 
+        
+        selectSeat(selectedSeat); 
+        showToast(`✅ ${selectedSeat}번 대여 완료`);
+        sendKakaoAlimtalk('RENT', contact, selectedSeat);
+    }
+
+    function triggerReturn() {
+        if (!selectedSeat || !rentalData[selectedSeat]) return;
+        if (pendingReturn) flushPendingReturn();
+
+        const seatNum = selectedSeat;
+        pendingReturn = { seatNum: seatNum, data: { ...rentalData[seatNum] } };
+        
+        delete rentalData[seatNum];
+        db.ref('rentalData').set(rentalData);
+        selectedSeat = null; resetPanel();
+
+        const toast = document.getElementById('undoToast');
+        document.getElementById('undoToastMsg').innerText = `⏳ ${seatNum}번 반납 대기 중... (5초)`;
+        toast.classList.add('show');
+
+        pendingReturnTimer = setTimeout(() => {
+            flushPendingReturn();
+        }, 5000);
+    }
+
+    function undoReturn() {
+        if (!pendingReturn) return;
+        clearTimeout(pendingReturnTimer);
+        
+        rentalData[pendingReturn.seatNum] = pendingReturn.data;
+        db.ref('rentalData').set(rentalData);
+        
+        document.getElementById('undoToast').classList.remove('show');
+        showToast(`↩️ ${pendingReturn.seatNum}번 테이블 반납이 취소되었습니다.`);
+        pendingReturn = null;
+    }
+
+    function flushPendingReturn() {
+        if (!pendingReturn) return;
+        const { seatNum, data } = pendingReturn;
+        if (data.type === 'RENT') {
+            addLog('RETURN', seatNum, data.name, data.contact, data.chairs, '-');
+            sendKakaoAlimtalk('RETURN', data.contact, seatNum);
+        }
+        document.getElementById('undoToast').classList.remove('show');
+        showToast(`🔄 ${seatNum}번 테이블 반납 확정`);
+        pendingReturn = null;
+    }
+
+    window.addEventListener('beforeunload', () => {
+        if (pendingReturn) flushPendingReturn();
+    });
+
+    function setMaintenance() { 
+        if (!selectedSeat) return;
+        const currentData = rentalData[selectedSeat];
+        let prevRentalInfo = null;
+        if (currentData && currentData.type === 'RENT') prevRentalInfo = { ...currentData };
+        else if (currentData && currentData.type === 'MAINTENANCE' && currentData.prevRental) prevRentalInfo = currentData.prevRental;
+
+        rentalData[selectedSeat] = { type: 'MAINTENANCE', prevRental: prevRentalInfo }; 
+        db.ref('rentalData').set(rentalData);
+        selectSeat(selectedSeat); 
+        showToast(`🔧 ${selectedSeat}번 정비 중 전환`);
+    }
+
+    function restoreFromMaintenance() {
+        if (!selectedSeat || !rentalData[selectedSeat]) return;
+        const d = rentalData[selectedSeat];
+        if (!d.prevRental) return showToast("⚠️ 복구할 이전 대여자 정보가 없습니다.");
+
+        rentalData[selectedSeat] = { ...d.prevRental, type: 'RENT' };
+        db.ref('rentalData').set(rentalData);
+        selectSeat(selectedSeat);
+        showToast(`✨ ${selectedSeat}번 테이블이 복구되었습니다.`);
+    }
+
+    function clearMaintenance() { 
+        if (!selectedSeat) return;
+        delete rentalData[selectedSeat]; 
+        db.ref('rentalData').set(rentalData);
+        selectSeat(selectedSeat); 
+        showToast(`✨ ${selectedSeat}번 정비 완료 (빈 좌석)`);
+    }
+
+    function setMinutes(m) {
+        currentRentalMinutes = m;
+        const btns = document.querySelectorAll('.time-options .btn-time');
+        const customInput = document.getElementById('rentalMinutes');
+        btns[0].classList.toggle('active', m === 0);
+        btns[1].classList.toggle('active', m === 60);
+        btns[2].classList.toggle('active', m === 120);
+        
+        if (m === 0) { customInput.style.display = 'none'; customInput.value = ''; }
+        else if (m === 60 || m === 120) { customInput.style.display = 'none'; customInput.value = m; }
+        else { customInput.style.display = 'block'; btns.forEach(b => b.classList.remove('active')); }
+    }
+
+    document.getElementById('contactInfo').addEventListener('input', (e) => {
+        let val = e.target.value.replace(/[^0-9]/g, '');
+        if (val.length > 0 && !val.startsWith('010')) val = '010';
+        else if (val.length === 0) val = '010';
+        e.target.value = val;
+    });
+
+    function addLog(type, seatNum, name, contact, chairs, durationStr) {
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        rentalLogs.unshift({ timestamp: timestamp, type: type, seatNum: seatNum, name: name, contact: contact, chairs: chairs, duration: durationStr });
+        db.ref('rentalLogs').set(rentalLogs);
+    }
+
+    function renderHistory() {
+        const tbody = document.getElementById('historyBody'); tbody.innerHTML = '';
+        if (rentalLogs.length === 0) return tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:30px;">기록이 없습니다.</td></tr>`;
+        rentalLogs.forEach(log => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td style="color:var(--text-muted); font-size:0.85rem;">${log.timestamp}</td><td><span style="padding:4px 10px; border-radius:6px; font-weight:800; font-size:0.8rem; background:${log.type === 'RENT' ? 'var(--primary-light)' : '#dcfce7'}; color:${log.type === 'RENT' ? 'var(--primary)' : '#166534'}; box-shadow:0 2px 4px rgba(0,0,0,0.05);">${log.type === 'RENT' ? '대여' : '반납'}</span></td><td><strong style="color:var(--text-main); font-size:1rem;">${log.seatNum}번</strong></td><td style="font-weight:700;">${log.name}</td><td style="font-family:monospace; color:var(--text-muted);">${log.contact}</td><td>${log.chairs}개</td><td><span style="background:var(--bg); padding:4px 10px; border-radius:6px; font-size:0.85rem; border:1px solid var(--border);">${log.duration}</span></td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function handleSearch(val) { searchQuery = val.trim().toLowerCase(); renderGrid(); }
+    
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        let btnIdx = 0;
+        if (tabName === 'grid') btnIdx = 0;
+        else if (tabName === 'history') btnIdx = 1;
+        else if (tabName === 'settings') btnIdx = 2;
+
+        document.querySelectorAll('.tab-btn')[btnIdx].classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+    // =====================================================================
+    // 7. 시스템 설정 업데이트 로직 (DB 연동)
+    // =====================================================================
+    function parseAisleSettings(colsStr, widthStr, maxCols) {
+        let aisles = [];
+        let parsedWidth = parseFloat(widthStr);
+        if (isNaN(parsedWidth) || parsedWidth <= 0) parsedWidth = 1;
+        if (!colsStr) return aisles;
+        colsStr.split(',').forEach(part => {
+            const colNum = parseInt(part.trim());
+            if (!isNaN(colNum) && colNum > 0 && colNum <= maxCols) aisles.push({ col: colNum, width: parsedWidth });
+        });
+        return aisles;
+    }
+
+    function updateSettingCountingPreview() {
+        const c = parseInt(document.getElementById('settingColsInput').value) || 0;
+        const r = parseInt(document.getElementById('settingRowsInput').value) || 0;
+        const colsStr = document.getElementById('settingAisleColsInput').value;
+        const widthStr = document.getElementById('settingAisleWidthInput').value;
+        const parsedAisles = parseAisleSettings(colsStr, widthStr, c);
+        const totalAisleWidth = parsedAisles.reduce((sum, a) => sum + (a.width >= 1 ? a.width : 1), 0);
+        const effectiveCols = Math.max(0, c - totalAisleWidth);
+        document.getElementById('countingPreviewText').innerText = `실제 테이블 열 ${effectiveCols}개 × 행 ${r}행 = 총 ${Math.floor(effectiveCols * r)}석`;
+    }
+
+    function applyGridSettings() {
+        const c = parseInt(document.getElementById('settingColsInput').value);
+        const r = parseInt(document.getElementById('settingRowsInput').value);
+        if (isNaN(c) || isNaN(r) || c < 1 || r < 1 || c > 30 || r > 30) return showToast("⚠️ 가로와 세로 개수는 1에서 30 사이로 입력해주세요.");
+
+        GRID_COLS = c;
+        GRID_ROWS = r;
+        AISLE_COLS = parseAisleSettings(document.getElementById('settingAisleColsInput').value, document.getElementById('settingAisleWidthInput').value, c);
+        saveSettingsToDB();
+        
+        selectedSeat = null; resetPanel();
+        showToast(`✅ 그리드 배치 및 통행로 설정 적용 완료`);
+    }
+
+    function updateNotice(val) { noticeTitle = val; saveSettingsToDB(); }
+    function updateMarquee(val) { marqueeText = val; saveSettingsToDB(); }
+    function saveAdminMemo(val) { adminMemoText = val; saveSettingsToDB(); }
+    
+    function toggleMarqueeBroadcast() {
+        isMarqueeActive = !isMarqueeActive;
+        saveSettingsToDB();
+        if (isMarqueeActive) showToast("📺 전광판 송출 시작");
+        else showToast("⏸️ 전광판 송출 중단");
+    }
+
+    function updateMarqueeUI() {
+        const btnToggleMarquee = document.getElementById('btnToggleMarquee');
+        if (isMarqueeActive) {
+            btnToggleMarquee.classList.add('active'); btnToggleMarquee.innerText = '🟡 송출 중 (끄기)';
+            document.body.classList.add('marquee-on'); document.body.classList.remove('marquee-off');
+        } else {
+            btnToggleMarquee.classList.remove('active'); btnToggleMarquee.innerText = '📺 전광판 켜기';
+            document.body.classList.add('marquee-off'); document.body.classList.remove('marquee-on');
+        }
+    }
+
+    // =====================================================================
+    // 8. 모달, 이미지 업로드, 페이드 인/아웃 슬라이드 루프
+    // =====================================================================
+    function startCustomerSlideLoop() {
+        if (slideTimer) clearInterval(slideTimer);
+        const runSlide = () => {
+            if (slideConfig.active === false || !slideConfig.images || slideConfig.images.length === 0) { 
+                document.getElementById('customerSlideOverlay').style.display = 'none'; return; 
+            }
+            const totalSlides = 1 + slideConfig.images.length;
+            const overlay = document.getElementById('customerSlideOverlay');
+            const imgElem = document.getElementById('customerSlideImg');
+
+            if (overlay.style.display === 'flex' && imgElem.classList.contains('fade-in')) {
+                imgElem.classList.remove('fade-in');
+                imgElem.classList.add('fade-out');
+                setTimeout(() => {
+                    proceedNextSlide(totalSlides, overlay, imgElem);
+                }, 800);
+            } else {
+                proceedNextSlide(totalSlides, overlay, imgElem);
+            }
+        };
+
+        const proceedNextSlide = (totalSlides, overlay, imgElem) => {
+            if (currentSlideIndex === 0) {
+                overlay.style.display = 'none';
+                imgElem.classList.remove('fade-in', 'fade-out');
+            } else {
+                const imgUrl = slideConfig.images[currentSlideIndex - 1];
+                if (imgUrl) {
+                    imgElem.src = imgUrl;
+                    overlay.style.display = 'flex';
+                    imgElem.classList.remove('fade-out');
+                    void imgElem.offsetWidth; 
+                    imgElem.classList.add('fade-in');
+                }
+            }
+            currentSlideIndex = (currentSlideIndex + 1) % totalSlides;
+        };
+
+        runSlide();
+        slideTimer = setInterval(runSlide, Math.max(2, slideConfig.interval || 5) * 1000);
+    }
+
+    function openSlideModal() {
+        document.getElementById('slideActiveCheck').checked = (slideConfig.active !== false);
+        document.getElementById('slideIntervalInput').value = slideConfig.interval || 5;
+        tempImages = [...(slideConfig.images || [])];
+        renderImagePreviews();
+        document.getElementById('slideModal').classList.add('active');
+    }
+    function closeSlideModal() { document.getElementById('slideModal').classList.remove('active'); }
+
+    async function handleImageUpload(e) {
+        const files = Array.from(e.target.files);
+        for (const file of files) {
+            // 4K 전광판용: 기존 1200px 강제 축소를 제거하고 최대 3840px까지 유지합니다.
+            // 3840px 이하이고 파일이 이미 적당한 크기라면 원본을 그대로 사용해 재압축 손실을 없앱니다.
+            const highQualityBase64 = await prepareSlideImage(file, 3840);
+            tempImages.push(highQualityBase64);
+        }
+        renderImagePreviews(); e.target.value = '';
+    }
+
+    function prepareSlideImage(file, maxDim = 3840) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(reader.error);
+            reader.onload = (e) => {
+                const originalUrl = e.target.result;
+                const img = new Image();
+                img.onerror = () => reject(new Error('이미지를 불러올 수 없습니다.'));
+                img.onload = () => {
+                    const originalWidth = img.naturalWidth || img.width;
+                    const originalHeight = img.naturalHeight || img.height;
+
+                    // 이미 4K 영역 안에 있고 파일도 3MB 이하라면 원본 그대로 저장
+                    // → JPEG 재압축으로 인한 글자/로고 뭉개짐을 방지합니다.
+                    if (originalWidth <= maxDim && originalHeight <= maxDim && file.size <= 3 * 1024 * 1024) {
+                        resolve(originalUrl);
+                        return;
+                    }
+
+                    let width = originalWidth;
+                    let height = originalHeight;
+                    if (width > maxDim || height > maxDim) {
+                        const ratio = Math.min(maxDim / width, maxDim / height);
+                        width = Math.max(1, Math.round(width * ratio));
+                        height = Math.max(1, Math.round(height * ratio));
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d', { alpha: false });
+                    if (!ctx) { resolve(originalUrl); return; }
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Chrome/Edge에서는 WebP가 JPEG보다 같은 용량에서 선명도가 좋습니다.
+                    // 지원되지 않는 환경은 고품질 JPEG로 안전하게 fallback 합니다.
+                    let result = canvas.toDataURL('image/webp', 0.92);
+                    if (!result || !result.startsWith('data:image/webp')) {
+                        result = canvas.toDataURL('image/jpeg', 0.92);
+                    }
+                    resolve(result);
+                };
+                img.src = originalUrl;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // 기존 함수명과의 호환성 유지
+    function resizeImage(file, maxDim = 3840) {
+        return prepareSlideImage(file, maxDim);
+    }
+    function removeSlideImage(index) { tempImages.splice(index, 1); renderImagePreviews(); }
+    
+    function renderImagePreviews() {
+        const container = document.getElementById('imagePreviewList'); container.innerHTML = '';
+        if (tempImages.length === 0) return container.innerHTML = `<span style="font-size:0.9rem; color:var(--text-muted); padding:12px;">등록된 사진이 없습니다.</span>`;
+        tempImages.forEach((imgSrc, idx) => {
+            const div = document.createElement('div'); div.className = 'image-preview-item';
+            div.innerHTML = `<img src="${imgSrc}"><button class="btn-del-img" onclick="removeSlideImage(${idx})">✕</button>`;
+            container.appendChild(div);
+        });
+    }
+    function saveSlideSettings() {
+        slideConfig = { 
+            active: document.getElementById('slideActiveCheck').checked, 
+            interval: parseInt(document.getElementById('slideIntervalInput').value) || 5, 
+            images: tempImages 
+        };
+        saveSettingsToDB();
+        closeSlideModal(); showToast(`🖼️ 슬라이드 설정 저장 완료`);
+    }
+
+    // =====================================================================
+    // SOLAPI 직접 연동
+    // SOLAPI 공식 인증 방식:
+    // signature = HMAC-SHA256(API Secret, Date + Salt)
+    // Authorization = HMAC-SHA256 apiKey=..., date=..., salt=..., signature=...
+    // =====================================================================
+    function bytesToHex(bytes) {
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function createSolapiSalt(byteLength = 16) {
+        const bytes = new Uint8Array(byteLength);
+        crypto.getRandomValues(bytes);
+        return bytesToHex(bytes);
+    }
+
+    async function createSolapiSignature(apiSecret, date, salt) {
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(apiSecret);
+        const messageData = encoder.encode(date + salt);
+        const cryptoKey = await crypto.subtle.importKey(
+            'raw',
+            keyData,
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+        );
+        const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        return bytesToHex(new Uint8Array(signatureBuffer));
+    }
+
+    async function getSolapiHeader(apiKey, apiSecret) {
+        const date = new Date().toISOString();
+        const salt = createSolapiSalt(16); // 32 hex chars / 16 bytes
+        const signature = await createSolapiSignature(apiSecret, date, salt);
+        return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
+    }
+
+    async function sendKakaoAlimtalk(type, toPhone, seatNum) {
+        const config = { ...DIRECT_SOLAPI_CONFIG };
+        if (!config.active) return;
+
+        const apiKey = String(config.apiKey || '').trim();
+        const apiSecret = String(config.apiSecret || '').trim();
+        const sender = String(config.sender || '').replace(/[^0-9]/g, '');
+        const pfid = String(config.pfid || '').trim();
+        const templateId = String(type === 'RENT' ? (config.tplStart || '') : (config.tplReturn || '')).trim();
+        const to = String(toPhone || '').replace(/[^0-9]/g, '');
+
+        if (!apiKey || !apiSecret || !pfid || !templateId || !to) {
+            showToast('⚠️ HTML의 DIRECT_SOLAPI_CONFIG 설정을 확인해주세요.');
+            return;
+        }
+
+        const text = type === 'RENT'
+            ? `풍향대동제, 틈: OTIUM\n좌석 번호: ${seatNum}번\n\n대여되었습니다.\n이용해주셔서 감사합니다 🌿`
+            : `풍향대동제, 틈: OTIUM\n좌석 번호: ${seatNum}번\n\n반납되었습니다.\n이용해주셔서 감사합니다 🌿`;
+
+        const message = {
+            to,
+            // 알림톡 자체는 from이 필수가 아니지만, 대체발송을 고려해 입력된 경우만 사용합니다.
+            ...(sender ? { from: sender } : {}),
+            text,
+            kakaoOptions: {
+                pfId: pfid,
+                templateId,
+                variables: { '#{좌석번호}': String(seatNum) }
+            }
+        };
+
+        try {
+            const authHeader = await getSolapiHeader(apiKey, apiSecret);
+            const res = await fetch('https://api.solapi.com/messages/v4/send-many/detail', {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authHeader
+                },
+                body: JSON.stringify({ messages: [message] })
+            });
+
+            const responseText = await res.text();
+            let result = {};
+            try { result = JSON.parse(responseText); } catch (_) {}
+
+            if (res.ok) {
+                showToast(`💬 ${seatNum}번 알림톡 발송 완료`);
+            } else {
+                console.error('SOLAPI 발송 실패:', res.status, result || responseText);
+                const detail = result.errorMessage || result.errorCode || result.message || `HTTP ${res.status}`;
+                showToast(`⚠️ 알림톡 발송 실패: ${detail}`);
+            }
+        } catch (e) {
+            console.error('SOLAPI 브라우저 직접 호출 오류:', e);
+            showToast('⚠️ 알림톡 연결 실패. 브라우저 CORS 정책을 확인해주세요.');
+        }
+    }
+
+    function openKakaoModal() {
+        // 알림톡 인증정보는 Firebase 설정이 아니라 이 HTML의 DIRECT_SOLAPI_CONFIG를 사용합니다.
+        const config = { ...DIRECT_SOLAPI_CONFIG };
+        document.getElementById('kakaoActiveCheck').checked = !!config.active;
+        document.getElementById('solapiApiKey').value = config.apiKey || '';
+        document.getElementById('solapiApiSecret').value = config.apiSecret || '';
+        document.getElementById('solapiSender').value = config.sender || '';
+        document.getElementById('solapiPfid').value = config.pfid || '';
+        document.getElementById('solapiTplStart').value = config.tplStart || '';
+        document.getElementById('solapiTplReturn').value = config.tplReturn || '';
+        document.getElementById('kakaoModal').classList.add('active');
+    }
+    function closeKakaoModal() { document.getElementById('kakaoModal').classList.remove('active'); }
+    function saveKakaoSettings() {
+        // 실제 API 자격증명은 HTML 상단 DIRECT_SOLAPI_CONFIG에서만 수정합니다.
+        // 관리자 모달에서 저장한 값이 Firebase나 LocalStorage로 덮어쓰지 않도록 합니다.
+        closeKakaoModal();
+        showToast(DIRECT_SOLAPI_CONFIG.active
+            ? '💬 HTML 직접 알림톡 설정을 사용합니다.'
+            : '💬 알림톡이 비활성화되어 있습니다. HTML의 DIRECT_SOLAPI_CONFIG.active를 true로 설정하세요.');
+    }
+
+    function resetAllData() {
+        if (confirm("⚠️ 정말 모든 대여 기록과 데이터를 초기화하시겠습니까?")) {
+            rentalData = {}; rentalLogs = []; selectedSeat = null; adminMemoText = ""; 
+            GRID_COLS = 10; GRID_ROWS = 9; AISLE_COLS = [];
+            
+            db.ref('rentalData').remove();
+            db.ref('rentalLogs').remove();
+            db.ref('settings').remove();
+            
+            resetPanel(); 
+            showToast("✨ 데이터 초기화 완료");
+        }
+    }
+    
+    function exportData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ GRID_COLS, GRID_ROWS, AISLE_COLS, rentalData, rentalLogs, noticeTitle, marqueeText, isDarkMode, slideConfig, adminMemoText, adminPassword, middlePassword }));
+        const downloadAnchor = document.createElement('a'); downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `대여데이터_${new Date().toISOString().slice(0,10)}.json`);
+        document.body.appendChild(downloadAnchor); downloadAnchor.click(); downloadAnchor.remove();
+        showToast("📤 백업 완료");
+    }
+    function importData(event) {
+        const fileReader = new FileReader();
+        fileReader.onload = function (e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                
+                db.ref('rentalData').set(imported.rentalData || {});
+                db.ref('rentalLogs').set(imported.rentalLogs || []);
+                
+                db.ref('settings').set({
+                    GRID_COLS: imported.GRID_COLS || 10,
+                    GRID_ROWS: imported.GRID_ROWS || 9,
+                    AISLE_COLS: imported.AISLE_COLS || [],
+                    noticeTitle: imported.noticeTitle || noticeTitle,
+                    marqueeText: imported.marqueeText || marqueeText,
+                    isMarqueeActive: imported.isMarqueeActive || false,
+                    adminMemoText: imported.adminMemoText || "",
+                    slideConfig: imported.slideConfig || { active: true, interval: 5, images: [] },
+                    adminPassword: imported.adminPassword || "0000",
+                    middlePassword: imported.middlePassword || "0000"
+                });
+
+                if (imported.isDarkMode !== undefined) {
+                    isDarkMode = imported.isDarkMode;
+                    localStorage.setItem(DARK_MODE_KEY, isDarkMode);
+                    applyDarkModeUI();
+                }
+
+                showToast("📥 복원 완료");
+            } catch (err) { showToast("⚠️ 파일 형식 오류"); }
+        };
+        fileReader.readAsText(event.target.files[0]);
+    }
+    
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else if (document.exitFullscreen) document.exitFullscreen();
+    }
+
+    async function toggleCustomerFullscreen() {
+        const btn = document.getElementById('customerFullscreenBtn');
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+                if (btn) btn.innerHTML = '⛶ 전체화면';
+                return;
+            }
+            const target = document.documentElement;
+            if (target.requestFullscreen) {
+                await target.requestFullscreen();
+                if (btn) btn.innerHTML = '⤢ 전체화면 해제';
+            } else {
+                showToast('이 브라우저에서는 전체화면 전환을 지원하지 않습니다. 브라우저 메뉴에서 전체화면을 선택해주세요.');
+            }
+        } catch (err) {
+            console.warn('전체화면 전환 실패:', err);
+            showToast('전체화면 전환이 차단되었습니다. 브라우저 메뉴에서 전체화면을 선택해주세요.');
+        }
+    }
+    document.addEventListener('fullscreenchange', () => {
+        const btn = document.getElementById('customerFullscreenBtn');
+        if (btn) btn.innerHTML = document.fullscreenElement ? '⤢ 전체화면 해제' : '⛶ 전체화면';
+    });
+    function openCustomerWindow() {
+        const url = window.location.href.split('?')[0] + '?mode=customer';
+        window.open(url, '_blank', 'width=1920,height=1080,resizable=yes');
+    }
+    function openMiddleManagerWindow() {
+        const url = window.location.href.split('?')[0] + '?mode=middle';
+        window.open(url, '_blank', 'width=480,height=850');
+    }
+    
+    function applyDarkModeUI() { document.body.classList.toggle('dark-mode', isDarkMode); }
+    function toggleDarkMode() { isDarkMode = !isDarkMode; localStorage.setItem(DARK_MODE_KEY, isDarkMode); applyDarkModeUI(); }
+
+    init();
+</script>
+</body>
+</html>
