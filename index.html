@@ -1660,12 +1660,17 @@
         showToast(`✨ ${selectedSeat}번 테이블이 복구되었습니다.`);
     }
 
-    function clearMaintenance() { 
-        if (!selectedSeat) return;
-        delete rentalData[selectedSeat]; 
+    function clearMaintenance() {
+        if (!selectedSeat || !rentalData[selectedSeat]) return;
+        const seatToClear = selectedSeat;
+        const confirmed = window.confirm(`${seatToClear}번 테이블의 정비를 완료하고 빈 좌석으로 전환할까요?\n\n확인을 누르면 정비 상태가 해제됩니다.`);
+        if (!confirmed) return;
+
+        delete rentalData[seatToClear];
         db.ref('rentalData').set(rentalData);
-        selectSeat(selectedSeat); 
-        showToast(`✨ ${selectedSeat}번 정비 완료 (빈 좌석)`);
+        selectedSeat = seatToClear;
+        selectSeat(seatToClear);
+        showToast(`✨ ${seatToClear}번 테이블 정비 완료 (빈 좌석)`);
     }
 
     function setMinutes(m) {
