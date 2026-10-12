@@ -1364,6 +1364,10 @@
     }
 
     function clearMaintenanceDirect(seatNum) {
+        if (!rentalData[seatNum]) return;
+        const confirmed = window.confirm(`${seatNum}번 테이블의 정비를 완료하고 빈 좌석으로 전환할까요?\n\n확인을 누르면 정비 상태가 해제됩니다.`);
+        if (!confirmed) return;
+
         delete rentalData[seatNum];
         db.ref('rentalData').set(rentalData);
         showToast(`✨ ${seatNum}번 테이블 정비 완료 처리되었습니다.`);
